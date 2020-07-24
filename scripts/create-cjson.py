@@ -416,7 +416,7 @@ def write_all_cjson(output_dir, save_dir, remove, overwrite):
 
 ### Writing cumulative json file ###
 
-def combined_cjson_name(cjson_dict):
+def combined_cjson_name(cjson_dict, parse_name):
     """Custom naming function for cumulative chemical JSON file keys.
 
     Chemical JSON files typically named by
@@ -434,12 +434,16 @@ def combined_cjson_name(cjson_dict):
     str
         Key for individual chemical JSON dictionary.
     """
+    
+    json_name = cjson_dict['name']
 
-    json_name = '.'.join(cjson_dict['name'].split('-')[-1].split('.')[1:])
+    if parse_name:
+        json_name = '.'.join(json_name.split('-')[-1].split('.')[1:])
+
     return json_name
 
 
-def combine_cjson(save_dir, name):
+def combine_cjson(save_dir, name, parse_name):
     """Writes cumulative chemical JSON file containing all files.
 
     Parameters
@@ -449,7 +453,6 @@ def combine_cjson(save_dir, name):
     name : str
         File name for cumulative chemical JSON file.
     """
-
     all_cjson_dict = {}
 
     start = save_dir.rfind(os.sep) + 1
@@ -462,7 +465,7 @@ def combine_cjson(save_dir, name):
             for cjson_file in files:
                 cjson_path = path + '/' + cjson_file
                 cjson_dict = read_cjson(cjson_path)
-                cjson_name = combined_cjson_name(cjson_dict)
+                cjson_name = combined_cjson_name(cjson_dict, parse_name)
                 cjson_files[cjson_name] = cjson_dict
             parent = reduce(dict.get, folders[:-1], all_cjson_dict)
             parent[folders[-1]] = cjson_files
@@ -502,6 +505,14 @@ def main():
     parser.add_argument(
         '--overwrite', action='store_true', help='overwrite json files'
     )
+    parser.add_argument(
+        '--parse_name', action='store_true',
+        help='Rename JSON file from parsed information from output file name'
+        ' in the format '
+        'system-structure-program.calctype-functional.basis.options.out'
+        'Output files should be organized in directories by functional '
+        'with basis subdirectories.'
+    )
     args = parser.parse_args()
     
     output_dir = standard_dir(args.output_dir[0])
@@ -512,7 +523,7 @@ def main():
         raise ValueError(f'{save_dir} is not a valid directory.')
 
     write_all_cjson(output_dir, save_dir, args.remove, args.overwrite)
-    combine_cjson(save_dir, args.name)
+    combine_cjson(save_dir, args.name, args.parse_name)
 
 
 if __name__ == "__main__":
