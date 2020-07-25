@@ -52,29 +52,43 @@ Note that all subdirectories are nested keys, so if a file is stored in dir1/dir
 ### Keys
 
 * `atoms`: Contains information describing the identity and position of all atoms in the system.
-    * `coords`: Cartesian coordinates in Angstrom units.
+    * `coords`: Coordinate information for the system.
+        * `3d`: An n x 3 array of Cartesian coordinates in Angstrom units where n is the number of atoms.
     * `elements`:
-* `chemical json`:
-* `convergence`:
-    * `scf`:
-        * `targets`:
-        * `values`:
-* `input parameters`:
-    * `basis`:
-    * `dispersion`:
-    * `functional`:
-    * `options`:
-    * `package`:
-    * `task`:
-    * `theory`:
-    * `version`:
-* `name`:
-* `properties`:
-    * `charge`:
+        * `atom count`: Number of atoms in system.
+        * `heavy atom count`: Number of heavy (not hydrogen) atoms.
+        * `number`: List of atomic numbers of all atoms in the system in the same order as `3d` array.
+* `chemical json`: Specifies chemical JSON format of '0' or '1'. The major revision from version 0 to 1 was a switch from the use of spaces to camel case.
+* `convergence`: Information regarding calculation convergence.
+    * `scf`: Self consistent field convergence.
+        * `targets`: Dictionary containing cclib-parsable scf targets and their convergence values.
+        * `values`: Convergence criteria values for each step of the calculation.
+* `input parameters`: Available parsable input keywords from output file. Only Gaussian and ORCA are currently implemented.
+    * `package`: Name of the computational chemistry package from cclib.
+    * `version`: Version of the computational chemistry package from cclib.
+    * `task`: Specifies the calculation type. Only 'energy', 'optimization', and 'frequency' are implemented.
+    * `theory`: Method category of either 'dft' or 'ab initio'.
+    * `functional`: If `theory` is 'dft' this specifies the functional. Keywords are manually specified in the `create-cjson.py` script.
+    * `basis`: Specifies the basis set used by the calculation.
+    * `dispersion`: If `theory` is 'dft' this specifies method of dispersion to be used.
+    * `options`: All other keywords parsed by cclib are put here.
+* `name`: File name.
+* `properties`: Properties of the system.
+    * `charge`: Charge of the system specified by the user.
     * `energy`:
-    * `multiplicity`:
-    * `number of atoms`:
-    * `total dipole moment`:
+        * `alpha`: Properties of the alpha electron.
+            * `gap`: The energy difference between the HOMO and LUMO.
+            * `homo`: The energy of the HOMO.
+        * `beta`: Properties of the beta electron.
+            * `gap`: The energy difference between the HOMO and LUMO.
+            * `homo`: The energy of the HOMO.
+        * `dispersion`: If dispersion energy 
+        * `energy units`: Specifies units of energy used in this file. Defaults to eV.
+        * `scf`: Energy from the SCF cycle.
+        * `total`: Final total calculated energy of the system.
+    * `multiplicity`: Multiplicity of the system specified by the user.
+    * `number of atoms`: Number of atoms in the system.
+    * `total dipole moment`: Calculated dipole moment of the system.
 
 ### Example
 
