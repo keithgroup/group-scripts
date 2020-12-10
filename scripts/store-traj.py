@@ -65,16 +65,7 @@ class OutFile:
             for trajline in trajfile:
                 self.extract(trajfile, trajline)
     
-    def save(self, save_dir):
-        """Saves data dictionary to ``npz`` file.
-
-        Parameters
-        ----------
-        save_dir : :obj:`str`
-            Path to save directory.
-        """
-        if save_dir[-1] != '/':
-            save_dir += '/'
+    def _save_npz(self, save_dir):
         data_arrays = {}
         for key in self.data.keys():
             data_arrays[key] = np.array(self.data[key])
@@ -82,6 +73,21 @@ class OutFile:
         help_string = 'Description of arrays.\n----------------------\n' + helps
         data_arrays['help'] = np.array(help_string)
         np.savez_compressed(f'{save_dir}{self.file_name}.npz', **data_arrays)
+    
+    def save(self, save_type, save_dir):
+        """Saves data dictionary to ``npz`` file.
+
+        Parameters
+        ----------
+        save_type : :obj:`str`
+            File type to save the data. Options are ``'npz'`` or ``'cjson'``.
+        save_dir : :obj:`str`
+            Path to save directory.
+        """
+        if save_dir[-1] != '/':
+            save_dir += '/'
+        if save_type == 'npz':
+            self._save_npz(save_dir)
 
         
 
@@ -242,7 +248,7 @@ class GAMESS(OutFile):
             line = next(trajfile)
 
             if 'frag_efcent' not in self.data.keys():
-                self.helps.append('frag_efcent: Unknown.')
+                self.helps.append('frag_efcent: Fragment center of mass in Bohrs.')
                 self.data['frag_efcent'] = []
                 self.helps.append('frag_force: Force vector on fragment.')
                 self.data['frag_force'] = []
@@ -301,7 +307,7 @@ def main():
 
     traj = assign_file(package, outfile_path)
     traj.parse()
-    traj.save('.')
+    traj.save('npz', '.')
 
 if __name__ == "__main__":
     main()
