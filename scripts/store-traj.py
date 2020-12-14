@@ -54,7 +54,7 @@ class OutFile:
     def __init__(self, package, source):
         self.package = package.lower()
         self.source = source
-        self.file_name = '.'.join(source.split('/')[-1].split('.')[:1])
+        self.file_name = '.'.join(source.split('/')[-1].split('.')[:-1])
         self.helps = []
         self.data = {}
      
