@@ -37,10 +37,9 @@ our research. These modications are
 file: one file per structure and calculation. This is inherently incompatible
 with geometry optimizations, trajectories, or any other iterative procedure.
 At of the time of writing (2021-01-03), there has been no concensus of
-how to manage these files. Our immediate solution is to nest each iteration as
-in its own QCSchema; each incrementally labeled an integer starting
-from zero (e.g., '2'). Furthermore, only iterations that have the same topology
-are supported (no checks are provided).
+how to manage these files. Our immediate solution is to list each QCSchema
+inside a list (i.e., [{},{},{}, ...]). Furthermore, only iterations that have
+the same topology are supported (no checks are provided).
 
 ## Changelog
 
@@ -50,8 +49,19 @@ and this project adheres to
 
 ## [Unreleased]
 
-## [0.0.1] - 2021-01
 ### Added
+- Custom parser for ORCA information such as integration grid.
+- Debug option to raise errors instead of skipping over files.
+
+### Changed
+- Nest iterations into a list instead of having int labels.
+- Standardized getting SCF, MP, and CC energies from cclib.
+- Requires outfile path to initialize schema classes.
+
+## [0.0.1] - 2021-01-03
+### Added
+- Support for output files containing multiple jobs or iterations
+  (optimizations).
 - ORCA Schema creator for single-point energies and gradients.
 
 """
@@ -63,6 +73,8 @@ from packaging import version
 import cclib
 import numpy as np
 import json
+
+# pylint: disable=no-member
 
 ### Hard coded information ###
 
@@ -175,6 +187,15 @@ basis_sets = {
         'epr-ii', 'epr-iii', 'iglo-ii', 'iglo-iii', 'aug-cc-pvtz-j'
     ]
 }
+
+
+
+
+
+
+
+
+
 
 ### Utility functions ###
 
@@ -317,6 +338,121 @@ def read_json(json_path):
     
     return json_dict
 
+
+
+
+
+
+
+
+
+
+### Manual parsing classes ###
+
+class outfileParser:
+    """Base class for parsing output files.
+
+    Parameters
+    ----------
+    outfile_path : :obj:`str`
+        Path to output file.
+    """
+
+    def __init__(self, outfile_path):
+        self.outfile_path = outfile_path
+        self.file_name = '.'.join(outfile_path.split('/')[-1].split('.')[:-1])
+
+
+
+
+
+class orcaParser(outfileParser):
+
+    def __init__(self, outfile_path):
+        super().__init__(outfile_path)
+    
+    def get_grid_info(self):
+        """DFT integration grid information.
+
+        All DFT calculations are performed with numerical integration, which
+        means a integration grid must be specified. This is typically handeled
+        with the Grid keyword. Furthermore, ORCA defaults to a multigrid
+        approach where one grid is used for the SCF cycle, and a different
+        (typically larger) grid is used for the final energy evaluation.
+
+        After testing different keyword combinations, the Grid keywords are not
+        always consistent with the final grid. Thus, we are going to directly
+        parse the grid information from the output file instead of depending
+        on the keywords.
+
+        Returns
+        -------
+        :obj:`dict`
+            Contains grid information using the following keys:
+
+            ``'scf_grid_level'``
+                :obj:`int` specifying ORCA default grid level (1 to 7) during
+                the SCF cycle.
+            ``'final_grid_level'``
+                :obj:`int` specifying ORCA default grid level for the final
+                evaluation.
+        
+        Notes
+        -----
+        Here are the main parameters specifying the ORCA default grid levels.
+
+        +--------+---------------+----------+
+        |  Grid  |  AngularGrid  |  IntAcc  |
+        +========+===============+==========+
+        |  1     |  Lebedev-50   |  4.67    |
+        |  2     |  Lebedev-110  |  4.34    |
+        |  3     |  Lebedev-194  |  4.34    |
+        |  4     |  Lebedev-302  |  4.67    |
+        |  5     |  Lebedev-434  |  5.01    |
+        |  6     |  Lebedev-590  |  5.34    |
+        |  7     |  Lebedev-770  |  5.67    |
+        +--------+---------------+----------+
+        """
+        grid_info = {}
+        lebedev_to_level = {
+            '50': 1, '110': 2, '194': 3, '302': 4, '434': 5, '590': 6, '770': 7
+        }
+
+        with open(self.outfile_path, mode='r') as outfile:
+            for line in outfile:
+                # -------------------
+                # DFT GRID GENERATION
+                # -------------------
+                # 
+                # General Integration Accuracy     IntAcc      ...  4.340
+                # Radial Grid Type                 RadialGrid  ... Gauss-Chebyshev
+                # Angular Grid (max. acc.)         AngularGrid ... Lebedev-110
+                if 'DFT GRID GENERATION' == line.strip():
+                    while 'Angular Grid (max. acc.)' not in line:
+                        line = next(outfile)
+                    lebedev_num = line.strip().split('-')[-1]
+                    grid_info['scf_grid_level'] = lebedev_to_level[lebedev_num]
+                    continue
+                
+                if 'Setting up the final grid:' == line.strip():
+                    while 'Angular Grid (max. acc.)' not in line:
+                        line = next(outfile)
+                    lebedev_num = line.strip().split('-')[-1]
+                    grid_info['final_grid_level'] = lebedev_to_level[lebedev_num]
+        
+        if 'final_grid_level' not in grid_info.keys():
+            grid_info['final_grid_level'] = grid_info['scf_grid_level']
+        return grid_info
+
+
+
+
+
+
+
+
+
+
 ### QCSchema classes ###
 
 class QCSchema:
@@ -366,7 +502,7 @@ class QCSchema:
         with open(f'{save_dir}{name}.json', 'w') as f:
             f.write(json_string)
     
-    def parse_output(self, outfile_path):
+    def parse_output(self):
         """Parse output file using cclib.
 
         Parameters
@@ -374,10 +510,10 @@ class QCSchema:
         outfile_path : :obj:`str`
             Path to computational chemistry output file.
         """
-        filename_with_extension = os.path.basename(outfile_path)
-        self.path = os.path.abspath(outfile_path)
+        filename_with_extension = os.path.basename(self.outfile_path)
+        self.path = os.path.abspath(self.outfile_path)
         self.name = '.'.join(filename_with_extension.split('.')[:-1])
-        self.outfile = cclib.io.ccread(outfile_path)
+        self.outfile = cclib.io.ccread(self.outfile_path)
         if self.outfile.atomcoords.shape[0] > 1:
             self.multiple = True
         elif self.outfile.atomcoords.shape[0] == 1:
@@ -395,6 +531,92 @@ class QCSchema:
             'qcschema_creator_version': __version__
         }
         return schema_dict
+    
+    def _get_scf_energy(self, iteration=-1):
+        """The energy after SCF cycle.
+
+        This is the energy for all DFT methods and HF energy for post-HF
+        calculations.
+
+        Parameters
+        ----------
+        iteration: :obj:`int`, optional
+            Defaults to the last iteration.
+        
+        Returns
+        -------
+        :obj:`float`
+            SCF energy in Hartree.
+        """
+        scfenergy = cclib.parser.utils.convertor(
+            self.outfile.scfenergies[iteration], 'eV', 'hartree'
+        )
+        return scfenergy
+    
+    def _get_dispersion_energy(self, iteration=-1):
+        """Dispersion energy corrections to DFT calculations.
+
+        Parameters
+        ----------
+        iteration: :obj:`int`, optional
+            Defaults to the last iteration.
+        
+        Returns
+        -------
+        :obj:`float`
+            Dispersion energy correction in Hartree.
+        """
+        dispersion_energy = cclib.parser.utils.convertor(
+            self.outfile.dispersionenergies[iteration], 'eV', 'hartree'
+        )
+        return dispersion_energy
+    
+    def _get_mp_energy(self, iteration=-1):
+        """Total energies after Moller-Plesset corrections.
+
+        Parameters
+        ----------
+        iteration: :obj:`int`, optional
+            Defaults to the last iteration.
+        
+        Returns
+        -------
+        :obj:`float`
+            Highest order MP corrections.
+        """
+        if self.outfile.mpenergies.ndim == 1:
+            mpenergy_ev = self.outfile.mpenergies[iteration]
+        elif self.outfile.mpenergies.ndim == 2:
+            order = self.outfile.mpenergies.shape[1] + 1
+            mpenergy_ev = self.outfile.mpenergies[iteration][order - 2]
+        mpenergy_hartree = cclib.parser.utils.convertor(
+            mpenergy_ev, 'eV', 'hartree'
+        )
+        return mpenergy_hartree
+    
+    def _get_cc_energy(self, iteration=-1):
+        """Energy after all coupled cluster corrections.
+
+        Only the highest order correction is included.
+
+        Parameters
+        ----------
+        iteration: :obj:`int`, optional
+            Defaults to the last iteration.
+        
+        Returns
+        -------
+        :obj:`float`
+            CC energy in Hartree.
+        """
+        ccenergy = cclib.parser.utils.convertor(
+            self.outfile.ccenergies[iteration], 'eV', 'hartree'
+        )
+        return ccenergy
+
+
+
+
 
 class orcaSchema(QCSchema):
     """ORCA specific QCSchema information.
@@ -403,12 +625,27 @@ class orcaSchema(QCSchema):
 
     * Single-point energies
     * Energy+Gradient
+    * Optimizations
+
+    Parameters
+    ----------
+    outfile_path : :obj:`str`
+        Path to output file.
+
+    Attributes
+    ----------
+    method_type : :obj:`str`
+        QCSchema method type of ``'scf'`` (e.g., DFT), ``'moller-plesset'``,
+        or ``'coupled cluster'``.
+
     """
 
-    def __init__(self):
+    def __init__(self, outfile_path):
         super().__init__()
+        self.outfile_path = outfile_path
+        self.parser = orcaParser(outfile_path)
     
-    def topology(self, iteration=-1):
+    def get_topology(self, iteration=-1):
         """Prepares basic topology information always available from cclib.
 
         Parameters
@@ -431,7 +668,7 @@ class orcaSchema(QCSchema):
             error_out(self.path, 'Topology data not succussfully parsed.')
         return topology
 
-    def model(self, iteration=-1):
+    def get_model(self, iteration=-1):
         """Model chemistry used for the calculation.
         """
         model = {}
@@ -475,22 +712,40 @@ class orcaSchema(QCSchema):
         
         return model
     
-    def keywords(self, iteration=-1):
-        """Parses parameters for the calculation.
+    def get_keywords(self, iteration=-1):
+        """Parses job parameters and will be stored under the ``'keyword'``
+        property in the QCSchema.
 
         Parameters
         ----------
         iteration: :obj:`int`, optional
             Defaults to the last iteration.
+        
+        Returns
+        -------
+        :obj:`dict`
+            Could contain the following keys:
+
+            ``'dispersion'``
+                Method of empirical dispersion included in job.
+            ``'implicit_solvent'``
+                Implicit (i.e., continuum) solvent model used in job.
+            ``'solvent_name'``
+                Name of the solvent (e.g., ``'water'``).
+            ``'frozencore'``
+                If the FrozenCore approximation was used. This defaults to
+                ``True`` for MP and CC calculations in ORCA.
+            ``'scf_convergence_tolerance'``
+                Self-consistent field convergence tolerance keyword for ORCA.
         """
-        keywords = {
-            'e_change': self.outfile.scftargets[iteration][0],
-            'max_density_change': self.outfile.scftargets[iteration][1],
-            'rms_density_change': self.outfile.scftargets[iteration][2]
-        }
+        keywords = {}
         _remove_keywords = []
+        
+        # Parses and categorizes calculation parameters.
         for kw in self.orca_keywords:
             kw_lower = kw.lower()
+
+            # Empirical dispersion
             if kw_lower in ['d4', 'd3bj', 'd3', 'd3zero', 'd2']:
                 if version.parse(self.outfile.metadata['package_version']) \
                    >= version.parse('4.0.0') and kw_lower == 'd3':
@@ -518,19 +773,29 @@ class orcaSchema(QCSchema):
                 keywords['frozencore'] = False
                 _remove_keywords.append(kw)
             
-            if kw_lower in ['normalscf', 'loosescf', 'sloppyscf', 'strongscf',
+            if kw_lower in ['sloppyscf', 'loosescf', 'normalscf', 'strongscf',
                             'tightscf', 'verytightscf', 'extremescf'] \
                 or 'scfconv' in kw_lower:
+                keywords['scf_convergence_tolerance'] = kw
                 _remove_keywords.append(kw)
             
+            # Removes grid information (will be manually parsed from outfile).
             if 'grid' in kw_lower:
-                kw_lower_split = kw_lower.split('grid')
-                if len(kw_lower_split) == 2 and int(kw_lower_split[-1]):
-                    pass
+                _remove_keywords.append(kw)
         
         for kw in _remove_keywords:
             self.orca_keywords.remove(kw)
         
+        # Add default scf convergence if not already specified.
+        if 'scf_convergence_tolerance' not in keywords.keys():
+            keywords['scf_convergence_tolerance'] = 'NormalSCF'
+        
+        # Manually parses SCF and final grid.
+        keywords = {
+            **keywords, **self.parser.get_grid_info()
+        }
+        
+        # Specifies if FrozenCore is used in MP or CC jobs.
         if self.method_type == 'moller-plesset':
             if version.parse(self.outfile.metadata['package_version']) \
                 >= version.parse('4.0.0'):
@@ -543,10 +808,12 @@ class orcaSchema(QCSchema):
                         keywords['frozencore'] = True
 
         # Add uncategorized calculation properties
-        keywords['other'] = self.orca_keywords
+        if len(self.orca_keywords) != 0:
+            keywords['other'] = self.orca_keywords
+
         return keywords
     
-    def properties(self, iteration=-1):
+    def get_properties(self, iteration=-1):
         """Prepares basic properties information always available from cclib.
 
         Parameters
@@ -556,36 +823,31 @@ class orcaSchema(QCSchema):
         """
         properties = {}
         if self.method_type == 'scf':
-            properties['scf_total_energy'] = cclib.parser.utils.convertor(
-                self.outfile.scfenergies[iteration], 'eV', 'hartree'
+            properties['scf_total_energy'] = self._get_scf_energy(
+                iteration=iteration
             )
             properties['scf_dispersion_correction_energy'] = cclib.parser.utils.convertor(
                 self.outfile.dispersionenergies[iteration], 'eV', 'hartree'
             )
             properties['scf_iterations'] = self.outfile.scfvalues[0].shape[0]
         elif self.method_type == 'moller-plesset':
-            if self.outfile.mpenergies.ndim == 1:
-                mpenergy = self.outfile.mpenergies[iteration]
-                scfenergy = self.outfile.scfenergies[iteration]
-            elif self.outfile.mpenergies.ndim == 2 \
-                 and self.outfile.mpenergies.shape[1] == 1:
-                mpenergy = self.outfile.mpenergies[iteration][0]
-                scfenergy = self.outfile.scfenergies[iteration]
-            properties['scf_total_energy'] = cclib.parser.utils.convertor(
-                scfenergy, 'eV', 'hartree'
+            properties['scf_total_energy'] = self._get_scf_energy(
+                iteration=iteration
             )
-            properties['mp2_total_energy'] = cclib.parser.utils.convertor(
-                mpenergy, 'eV', 'hartree'
+            properties['mp2_total_energy'] = self._get_mp_energy(
+                iteration=iteration
             )
         elif self.method_type == 'coupled cluster':
-            pass
+            properties['mp2_total_energy'] = self._get_cc_energy(
+                iteration=iteration
+            )
         else:
             error_out(self.path, 'Unknown method type.')
         properties['calcinfo_nbasis'] = self.outfile.nbasis
         properties['calcinfo_nmo'] = self.outfile.nmo
         return properties
     
-    def driver(self, iteration=-1):
+    def get_driver(self, iteration=-1):
         """The purpose of the calculation and its direct result.
 
         Parameters
@@ -595,10 +857,13 @@ class orcaSchema(QCSchema):
         """
         driver = {}
         _remove_keywords = []
+
         for kw in self.orca_keywords:
             kw_lower = kw.lower()
             if kw_lower == 'engrad' or kw_lower == 'numgrad':
-                driver['driver'] = 'gradient'
+                self.calc_driver = 'gradient'
+                driver['driver'] = self.calc_driver
+
                 if self.outfile.grads.ndim == 3:
                     grads = self.outfile.grads[iteration]
                 else:
@@ -606,23 +871,41 @@ class orcaSchema(QCSchema):
                 driver['return_result'] = convert_forces(
                     grads, 'hartree', 'bohr', 'hartree', 'Angstrom'
                 )
+
                 _remove_keywords.append(kw)
                 break
             elif kw_lower == 'freq' or kw_lower == 'numfreq':
+                self.calc_driver = 'frequency'
+                driver['driver'] = self.calc_driver
+
                 _remove_keywords.append(kw)
                 break
             elif kw_lower == 'opt' or kw_lower == 'copt' or kw_lower == 'zopt':
-                driver['driver'] = 'optimization'
+                self.calc_driver = 'optimization'
+                driver['driver'] = self.calc_driver
+
                 _remove_keywords.append(kw)
                 break
             elif kw_lower == 'energy' or kw_lower == 'sp':
-                driver['driver'] = 'energy'
+                # This driver will be captured by the len(driver) == 0 condition.
                 _remove_keywords.append(kw)
                 break
         
         # ORCA defaults to single-point energies.
         if len(driver) == 0:
-            driver['driver'] == 'energy'
+            self.calc_driver = 'energy'
+            driver['driver'] = self.calc_driver
+            if hasattr(self.outfile, 'ccenergies'):
+                return_result = self.outfile.ccenergies[iteration]
+            elif hasattr(self.outfile, 'mpenergies'):
+                return_result = self._get_mp_energy(
+                iteration=iteration
+            )
+            elif hasattr(self.outfile, 'scfenergies'):
+                return_result = self._get_scf_energy(
+                    iteration=iteration
+                )
+            driver['return_result'] = return_result
             pass
 
         for kw in _remove_keywords:
@@ -630,7 +913,7 @@ class orcaSchema(QCSchema):
         
         return driver
 
-    def provenance(self):
+    def get_provenance(self):
         """Program specification that performed the calculation.
         """
         provenance = {
@@ -639,40 +922,60 @@ class orcaSchema(QCSchema):
         }
         return provenance
     
-    @property
-    def schema(self):
+    def get_schema(self, debug=False):
         """QC schema of an ORCA output file.
 
-        Calculations supported: single-point energies.
+        Calculations supported: single-point energies, gradients, optimizations.
 
         :type: :obj:`dict`
         """
         if not hasattr(self, '_schema'):
-            schema_dicts = {}
+
+            schema_dicts = []
             self.orca_keywords = self.outfile.metadata['keywords']
             for i in range(0, self.outfile.atomcoords.shape[0]):
+                # Optimizations are iterative with only a single set of
+                # keywords; this is different than consecutive jobs (e.g., 
+                # energies) that have repeated keywords. So, we reinitialzie the
+                # keywords for each optimization iteration.
+                if hasattr(self, 'calc_driver') \
+                   and self.calc_driver == 'optimization':
+                    self.orca_keywords = self.outfile.metadata['keywords']
                 try:
-                    schema_dicts[i] = super().schema
-                    schema_dicts[i] = {
-                        **schema_dicts[i], **self.topology(iteration=i)
+                    schema_dicts.append(super().schema)
+                    schema_dicts[-1]['provenance'] = self.get_provenance()
+                    schema_dicts[-1] = {
+                        **schema_dicts[-1], **self.get_topology(iteration=i)
                     }
-                    schema_dicts[i] = {
-                        **schema_dicts[i], **self.driver(iteration=i)
+                    schema_dicts[-1] = {
+                        **schema_dicts[-1], **self.get_driver(iteration=i)
                     }
-                    schema_dicts[i]['provenance'] = self.provenance()
-                    schema_dicts[i]['model'] = self.model(iteration=i)
-                    schema_dicts[i]['keywords'] = self.keywords(iteration=i)
-                    schema_dicts[i]['properties'] = self.properties(iteration=i)
-                    schema_dicts[i]['success'] = self.outfile.metadata['success']
+                    schema_dicts[-1]['model'] = self.get_model(iteration=i)
+                    schema_dicts[-1]['keywords'] = self.get_keywords(iteration=i)
+                    schema_dicts[-1]['properties'] = self.get_properties(iteration=i)
+                    schema_dicts[-1]['success'] = self.outfile.metadata['success']
                     if len(schema_dicts) == 1:
                         self._schema = schema_dicts[0]
                     else:
                         self._schema = schema_dicts
                 except:
-                    error_out(self.path, 'Uncaught exceptions.')
-                    self._schema = {}
-                    break
+                    if debug:
+                        raise
+                    else:
+                        if self.path not in error_files:
+                            error_out(self.path, 'Uncaught exceptions.')
+                        self._schema = schema_dicts
+                        break
         return self._schema
+
+
+
+
+
+
+
+
+
 
 ### Runtime Functions ###
 
@@ -705,6 +1008,14 @@ def error_out(outfile, error_message):
     print(f'\u001b[31;1mError: {error_message}\u001b[0m')
 
 
+
+
+
+
+
+
+
+
 def main():
     
     parser = argparse.ArgumentParser(
@@ -732,7 +1043,7 @@ def main():
         help='Recursively create schemas.'
     )
     parser.add_argument(
-        '--overwrite', action='store_true', help='Overwrite JSON files'
+        '-o', '--overwrite', action='store_true', help='Overwrite JSON files'
     )
     parser.add_argument(
         '--combine', action='store_true',
@@ -742,6 +1053,10 @@ def main():
     parser.add_argument(
         '-p', '--prettify', action='store_true',
         help='Prettify JSON files with indentation.'
+    )
+    parser.add_argument(
+        '-d', '--debug', action='store_true',
+        help='Will not continue if an error is encountered'
     )
     args = parser.parse_args()
     print(f'QCSchema creator v{__version__}')
@@ -759,9 +1074,9 @@ def main():
     if os.path.isfile(outputs):
         print(f'Making QCSchema for {outputs}')
         schema = identify_package(outputs)
-        out_schema = schema()
-        out_schema.parse_output(outputs)
-        out_schema.schema  # Will trigger any errors before writing.
+        out_schema = schema(outputs)
+        out_schema.parse_output()
+        out_schema.get_schema(debug=args.debug)  # Will trigger any errors before writing.
         if out_schema.path not in error_files:
              all_qcschemas.append(out_schema)
     elif os.path.isdir(outputs):
@@ -792,9 +1107,9 @@ def main():
                     continue
             print(f'\nMaking QCSchema for {file_name}')
             schema = identify_package(outfile)
-            out_schema = schema()
-            out_schema.parse_output(outfile)
-            out_schema.schema  # Will trigger any errors before writing.
+            out_schema = schema(outfile)
+            out_schema.parse_output()
+            out_schema.get_schema(debug=args.debug)  # Will trigger any errors before writing.
             if out_schema.path not in error_files:
                 all_qcschemas.append(out_schema)
             
@@ -806,11 +1121,13 @@ def main():
         if save_dir == './':
             abs_path = os.path.dirname(schema.path)
             schema.write(
-                schema.name, schema.schema, abs_path, prettify=args.prettify
+                schema.name, schema.get_schema(debug=args.debug), abs_path,
+                prettify=args.prettify
             )
         else:
             schema.write(
-                schema.name, schema.schema, save_dir, prettify=args.prettify
+                schema.name, schema.get_schema(debug=args.debug), save_dir,
+                prettify=args.prettify
             )
 
     if args.combine:
