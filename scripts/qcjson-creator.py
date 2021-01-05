@@ -57,7 +57,7 @@ and this project adheres to
 ### Added
 - Custom parser for ORCA information such as integration grid, scf energy
   contributions (e.g., one-electron and two-electron energies), MP2 correlation
-  energies.
+  energies, RI approximations.
 - Debug option to raise errors instead of skipping over files.
 
 ### Changed
