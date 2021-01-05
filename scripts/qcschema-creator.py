@@ -528,6 +528,49 @@ class orcaParser(outfileParser):
         
         return scf_info
     
+    def _parse_other_mp(self, outfile, mp_info):
+        """Moller-Plesset calculation properties.
+
+        This is called directly after the ``'ORCA  MP2 '`` trigger, and 
+        will terminate once the ``'ORCA property calculations'`` trigger is reached.
+
+        Instead of returning the energies themselves, we handle the creation and
+        modification of ``mp_info`` here so any missing information is not an
+        issue.
+
+        Parameters
+        ----------
+        outfile
+            An opened output file.
+        mp_info : :obj:`dict`
+            The mp_info dict that contains all QCSchema-supported mp energies.
+        
+        Returns
+        -------
+        :obj:`dict`
+            Available MP energy components that could include the following
+            keys.
+
+            ``'mp2_correlation_energy'``
+                The MP2 correlation energy.
+        """
+        for line in outfile:
+            #  MP2 CORRELATION ENERGY   :     -3.132364939 Eh
+            if 'MP2 CORRELATION ENERGY' in line:
+                if 'mp2_correlation_energy' not in mp_info.keys():
+                    mp_info['mp2_correlation_energy'] = []
+                mp_info['mp2_correlation_energy'].append(
+                    float(line.split()[4])
+                )
+
+            #      ***************************************
+            #      *     ORCA property calculations      *
+            #      ***************************************
+            if '*     ORCA property calculations      *' == line.strip():
+                break
+        
+        return mp_info
+    
     def get_scf_info(self, iteration=-1):
         """Other scf energy components.
 
@@ -575,6 +618,47 @@ class orcaParser(outfileParser):
         for k, v in self._scf_info.items():
             scf_info_iter[k] = v[iteration]
         return scf_info_iter
+    
+    def get_mp_info(self, iteration=-1):
+        """Other MP energy components.
+
+        Parameters
+        ----------
+        iteration: :obj:`int`, optional
+            Defaults to the last iteration.
+
+        Returns
+        -------
+        :obj:`dict`
+            Available MP energy components that could include the following
+            keys.
+
+            ``'scf_one_electron_energy'``
+                The one-electron (core Hamiltonian) energy contribution to the
+                total SCF energy.
+        """
+        
+        if not hasattr(self, 'mp_info'):
+            mp_info = {}
+            with open(self.outfile_path, mode='r') as outfile:
+                for line in outfile:
+
+                    # ----------------------------------------------------------
+                    #                         ORCA  MP2 
+                    # ----------------------------------------------------------
+                    if 'ORCA  MP2' == line.strip():
+                        # Iterative jobs will have multiple MP2 calculations.
+                        # Thus, we separated the parsing trigger and the actual
+                        # parsing of the MP2 energies. That way, the entire
+                        # file is parsed instead of stopping at the first one.
+                        mp_info = self._parse_other_mp(outfile, mp_info)
+
+            self._mp_info = mp_info
+        
+        mp_info_iter = {}
+        for k, v in self._mp_info.items():
+            mp_info_iter[k] = v[iteration]
+        return mp_info_iter
 
 
 
@@ -632,7 +716,7 @@ class QCJSON:
                 schema_dict, cls=cclib.io.cjsonwriter.NumpyAwareJSONEncoder,
                 sort_keys=True
             )
-        with open(f'{save_dir}{name}.qcjson', 'w') as f:
+        with open(f'{save_dir}{name}.json', 'w') as f:
             f.write(json_string)
     
     def parse_output(self):
@@ -1036,6 +1120,9 @@ class orcaJSON(QCJSON):
             properties['mp2_total_energy'] = self._get_mp_energy(
                 iteration=iteration
             )
+            properties = {
+                **properties, **self.parser.get_mp_info(iteration=iteration)
+            }
         elif self.method_type == 'coupled cluster':
             # TODO
             pass
