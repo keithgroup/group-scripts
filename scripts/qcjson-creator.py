@@ -22,7 +22,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-__version__ = "0.0.1"
+__version__ = "0.1.0"
 
 """
 # QCJSON Creator
@@ -54,6 +54,7 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.1.0] - 2021-01-05
 ### Added
 - Custom parser for ORCA information such as integration grid, scf energy
   contributions (e.g., one-electron and two-electron energies), MP2 correlation
