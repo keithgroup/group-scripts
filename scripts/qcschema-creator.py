@@ -41,6 +41,10 @@ how to manage these files. Our immediate solution is to list each QCSchema
 inside a list (i.e., [{},{},{}, ...]). Furthermore, only iterations that have
 the same topology are supported (no checks are provided).
 
+## Requirements
+- cclib (>=1.7)
+- numpy
+
 ## Changelog
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
@@ -281,6 +285,11 @@ def convert_forces(
     r_units : obj:`str`
         Desired units of distance. Available units are ``'Angstrom'`` and
         ``'bohr'``.
+    
+    Returns
+    -------
+    :obj:`numpy.ndarray`
+        Forces converted into the desired units.
     """
     #'ORCA': {'e_unit': 'hartree', 'r_unit': 'bohr'}
     if e_units not in ['eV', 'hartree', 'kcal/mol', 'kJ/mol']:
@@ -447,12 +456,39 @@ class orcaParser(outfileParser):
         return grid_info
     
     def _parse_other_scf(self, outfile, scf_info):
-        """
+        """The nulear repulsion, one- and two-electron energy, and
+        exchange-correlation energy after a SCF cycle.
+
+        This is called directly after the ``'TOTAL SCF ENERGY'`` trigger, and 
+        will terminate once the ``'SCF CONVERGENCE'`` trigger is reached.
+
+        Instead of returning the energies themselves, we handle the creation and
+        modification of ``scf_info`` here so any missing information (such as
+        ``'scf_xc_energy'`` in MP2 calculations) is not an issue.
 
         Parameters
         ----------
         outfile
-            Open output file.
+            An opened output file.
+        scf_info : :obj:`dict`
+            The scf_info dict that contains all QCSchema-supported SCF energies.
+        
+        Returns
+        -------
+        :obj:`dict`
+            Available SCF energy components that could include the following
+            keys.
+
+            ``'scf_one_electron_energy'``
+                The one-electron (core Hamiltonian) energy contribution to the
+                total SCF energy.
+            ``'scf_two_electron_energy'``
+                The two-electron energy contribution to the total SCF energy.
+            ``'nuclear_repulsion_energy'``
+                The nuclear repulsion energy contribution to the total SCF
+                energy.
+            ``'scf_xc_energy'``
+                The functional energy contribution to the total SCF energy.
         """
         for line in outfile:
             # Nuclear Repulsion  :  135.87324654 Eh    3697.29901 eV
@@ -503,7 +539,8 @@ class orcaParser(outfileParser):
         Returns
         -------
         :obj:`dict`
-            Contains grid information using the following keys:
+            Available SCF energy components that could include the following
+            keys.
 
             ``'scf_one_electron_energy'``
                 The one-electron (core Hamiltonian) energy contribution to the
@@ -526,6 +563,10 @@ class orcaParser(outfileParser):
                     # TOTAL SCF ENERGY
                     # ----------------
                     if 'TOTAL SCF ENERGY' == line.strip():
+                        # Iterative jobs will have multiple SCF calculations.
+                        # Thus, we separated the parsing trigger and the actual
+                        # parsing of the SCF energies. That way, the entire
+                        # file is parsed instead of stopping at the first one.
                         scf_info = self._parse_other_scf(outfile, scf_info)
 
             self._scf_info = scf_info
@@ -547,7 +588,7 @@ class orcaParser(outfileParser):
 
 ### QCSchema classes ###
 
-class QCSchema:
+class QCJSON:
     """Base quantum chemistry schema.
 
     Attributes
@@ -591,7 +632,7 @@ class QCSchema:
                 schema_dict, cls=cclib.io.cjsonwriter.NumpyAwareJSONEncoder,
                 sort_keys=True
             )
-        with open(f'{save_dir}{name}.json', 'w') as f:
+        with open(f'{save_dir}{name}.qcjson', 'w') as f:
             f.write(json_string)
     
     def parse_output(self):
@@ -674,7 +715,7 @@ class QCSchema:
         Returns
         -------
         :obj:`float`
-            Highest order MP corrections.
+            Total energy from highest order MP corrections.
         """
         if self.outfile.mpenergies.ndim == 1:
             mpenergy_ev = self.outfile.mpenergies[iteration]
@@ -710,7 +751,7 @@ class QCSchema:
 
 
 
-class orcaSchema(QCSchema):
+class orcaJSON(QCJSON):
     """ORCA specific QCSchema information.
 
     Supported calculation types:
@@ -726,10 +767,13 @@ class orcaSchema(QCSchema):
 
     Attributes
     ----------
+    outfile_path : :obj:`str`
+        Path to output file.
     method_type : :obj:`str`
         QCSchema method type of ``'scf'`` (e.g., DFT), ``'moller-plesset'``,
         or ``'coupled cluster'``.
-
+    parser : :obj:`orcaParser`
+        Manually parse information from output file.
     """
 
     def __init__(self, outfile_path):
@@ -738,12 +782,36 @@ class orcaSchema(QCSchema):
         self.parser = orcaParser(outfile_path)
     
     def get_topology(self, iteration=-1):
-        """Prepares basic topology information always available from cclib.
+        """A full description of the overall molecule its geometry, fragments,
+        and charges.
+
+        Returned keys will be a top-level JSON property.
 
         Parameters
         ----------
         iteration: :obj:`int`, optional
             Defaults to the last iteration.
+        
+        Returns
+        -------
+        :obj:`dict`
+
+            ``'molecule'``
+                Atomic information about the system. Contains the following keys
+
+                ``'geometry'``
+                    (3 * nat, ) vector of XYZ coordinates [a0] of the atoms.
+                ``'symbols'``
+                    (nat, ) atom symbols in title case.
+            ``'molecular_charge'``
+                The overall charge of the molecule.
+            ``'molecular_multiplicity'``
+                The overall multiplicity of the molecule.
+            ``'name'``
+                The name of the molecule or system.
+            ``'atomic_numbers'``
+                (nat, ) atomic numbers, nuclear charge for atoms. Ghostedness
+                should be indicated through ‘real’ field, not zeros here.
         """
         try:
             topology = {
@@ -762,6 +830,23 @@ class orcaSchema(QCSchema):
 
     def get_model(self, iteration=-1):
         """Model chemistry used for the calculation.
+
+        This will be placed under the ``'model'`` JSON property.
+
+        Parameters
+        ----------
+        iteration: :obj:`int`, optional
+            Defaults to the last iteration.
+        
+        Returns
+        -------
+        :obj:`dict`
+
+            ``'method'``
+                They main quantum-chemical method used for the calculation. For
+                DFT calculations this would be the functional.
+            ``'basis'``
+                The basis set used for the calculation.
         """
         model = {}
         _remove_keywords = []
@@ -805,8 +890,9 @@ class orcaSchema(QCSchema):
         return model
     
     def get_keywords(self, iteration=-1):
-        """Parses job parameters and will be stored under the ``'keyword'``
-        property in the QCSchema.
+        """Package-specific job properties.
+
+        This will be placed under the ``'keyword'`` JSON property.
 
         Parameters
         ----------
@@ -906,12 +992,33 @@ class orcaSchema(QCSchema):
         return keywords
     
     def get_properties(self, iteration=-1):
-        """Prepares basic properties information always available from cclib.
+        """A list of valid quantum chemistry properties tracked by the schema.
+
+        This will be placed under the ``'properties'`` JSON property.
 
         Parameters
         ----------
         iteration: :obj:`int`, optional
             Defaults to the last iteration.
+        
+        Returns
+        -------
+        :obj:`dict`
+
+            ``'calcinfo_nbasis'``
+                The number of basis functions for the computation.
+            ``'calcinfo_nmo'``
+                The number of molecular orbitals for the computation.
+            ``'scf_total_energy'``
+                The total electronic energy of the SCF stage of the calculation.
+                This is represented as the sum of the … quantities.
+            ``'scf_dispersion_correction_energy'``
+                The dispersion correction appended to an underlying functional
+                when a DFT-D method is requested.
+            ``'scf_iterations'``
+                The number of SCF iterations taken before convergence.
+            ``'mp2_total_energy'``
+                The total MP2 energy (MP2 correlation energy + HF energy).
         """
         properties = {}
         if self.method_type == 'scf':
@@ -930,9 +1037,8 @@ class orcaSchema(QCSchema):
                 iteration=iteration
             )
         elif self.method_type == 'coupled cluster':
-            properties['mp2_total_energy'] = self._get_cc_energy(
-                iteration=iteration
-            )
+            # TODO
+            pass
         else:
             error_out(self.path, 'Unknown method type.')
         properties['calcinfo_nbasis'] = self.outfile.nbasis
@@ -945,16 +1051,32 @@ class orcaSchema(QCSchema):
     def get_driver(self, iteration=-1):
         """The purpose of the calculation and its direct result.
 
+        Returned keys will be a top-level JSON property.
+
         Parameters
         ----------
         iteration: :obj:`int`, optional
             Defaults to the last iteration.
+        
+        Returns
+        -------
+        :obj:`dict`
+
+            ``'driver'``
+                The purpose of the calculation. Could be ``'energy'``,
+                ``'gradient'``, ``'optimization'``, or ``'frequency'``.
+            ``'return_results'``
+                The direct result of the driver calculation. For example, a
+                energy+gradient calculation will return the gradient (the
+                energies will be included in the ``'properties'`` property).
         """
         driver = {}
         _remove_keywords = []
 
         for kw in self.orca_keywords:
             kw_lower = kw.lower()
+
+            # Gradients
             if kw_lower == 'engrad' or kw_lower == 'numgrad':
                 self.calc_driver = 'gradient'
                 driver['driver'] = self.calc_driver
@@ -969,24 +1091,30 @@ class orcaSchema(QCSchema):
 
                 _remove_keywords.append(kw)
                 break
+
+            # Frequencies (not supported)
             elif kw_lower == 'freq' or kw_lower == 'numfreq':
                 self.calc_driver = 'frequency'
                 driver['driver'] = self.calc_driver
 
                 _remove_keywords.append(kw)
                 break
+
+            # Optimizations
             elif kw_lower == 'opt' or kw_lower == 'copt' or kw_lower == 'zopt':
                 self.calc_driver = 'optimization'
                 driver['driver'] = self.calc_driver
 
                 _remove_keywords.append(kw)
                 break
+            
+            # Energies
             elif kw_lower == 'energy' or kw_lower == 'sp':
                 # This driver will be captured by the len(driver) == 0 condition.
                 _remove_keywords.append(kw)
                 break
         
-        # ORCA defaults to single-point energies.
+        # ORCA defaults to single-point energies if no keyword is present.
         if len(driver) == 0:
             self.calc_driver = 'energy'
             driver['driver'] = self.calc_driver
@@ -1003,13 +1131,24 @@ class orcaSchema(QCSchema):
             driver['return_result'] = return_result
             pass
 
+        # Removes triggered keywords so as not to be included in uncategorized
+        # keywords.
         for kw in _remove_keywords:
             self.orca_keywords.remove(kw)
         
         return driver
 
     def get_provenance(self):
-        """Program specification that performed the calculation.
+        """Information about the originating package of the calculation.
+
+        Returns
+        -------
+        :obj:`dict`
+            
+            ``'creator'``
+                Package name.
+            ``'version'``
+                Package version.
         """
         provenance = {
             'creator': 'ORCA',
@@ -1017,7 +1156,7 @@ class orcaSchema(QCSchema):
         }
         return provenance
     
-    def get_schema(self, debug=False):
+    def get_json(self, debug=False):
         """QC schema of an ORCA output file.
 
         Calculations supported: single-point energies, gradients, optimizations.
@@ -1026,7 +1165,7 @@ class orcaSchema(QCSchema):
         """
         if not hasattr(self, '_schema'):
 
-            schema_dicts = []
+            all_jsons = []
             self.orca_keywords = self.outfile.metadata['keywords']
             for i in range(0, self.outfile.atomcoords.shape[0]):
                 # Optimizations are iterative with only a single set of
@@ -1037,29 +1176,29 @@ class orcaSchema(QCSchema):
                    and self.calc_driver == 'optimization':
                     self.orca_keywords = self.outfile.metadata['keywords']
                 try:
-                    schema_dicts.append(super().schema)
-                    schema_dicts[-1]['provenance'] = self.get_provenance()
-                    schema_dicts[-1] = {
-                        **schema_dicts[-1], **self.get_topology(iteration=i)
+                    all_jsons.append(super().schema)
+                    all_jsons[-1]['provenance'] = self.get_provenance()
+                    all_jsons[-1] = {
+                        **all_jsons[-1], **self.get_topology(iteration=i)
                     }
-                    schema_dicts[-1] = {
-                        **schema_dicts[-1], **self.get_driver(iteration=i)
+                    all_jsons[-1] = {
+                        **all_jsons[-1], **self.get_driver(iteration=i)
                     }
-                    schema_dicts[-1]['model'] = self.get_model(iteration=i)
-                    schema_dicts[-1]['keywords'] = self.get_keywords(iteration=i)
-                    schema_dicts[-1]['properties'] = self.get_properties(iteration=i)
-                    schema_dicts[-1]['success'] = self.outfile.metadata['success']
-                    if len(schema_dicts) == 1:
-                        self._schema = schema_dicts[0]
+                    all_jsons[-1]['model'] = self.get_model(iteration=i)
+                    all_jsons[-1]['keywords'] = self.get_keywords(iteration=i)
+                    all_jsons[-1]['properties'] = self.get_properties(iteration=i)
+                    all_jsons[-1]['success'] = self.outfile.metadata['success']
+                    if len(all_jsons) == 1:
+                        self._schema = all_jsons[0]
                     else:
-                        self._schema = schema_dicts
+                        self._schema = all_jsons
                 except:
                     if debug:
                         raise
                     else:
                         if self.path not in error_files:
                             error_out(self.path, 'Uncaught exceptions.')
-                        self._schema = schema_dicts
+                        self._schema = all_jsons
                         break
         return self._schema
 
@@ -1076,7 +1215,7 @@ class orcaSchema(QCSchema):
 
 # Triggers to identify output files.
 triggers = [
-    (orcaSchema, ["O   R   C   A"], True)
+    (orcaJSON, ["O   R   C   A"], True)
 ]
 
 def cclib_version_check():
@@ -1160,7 +1299,7 @@ def main():
 
     cclib_version_check()
 
-    all_qcschemas = []
+    all_qcsjsons = []
 
     save_dir = args.save_dir
     if save_dir[-1] != '/':
@@ -1168,12 +1307,11 @@ def main():
     outputs = args.outputs
     if os.path.isfile(outputs):
         print(f'Making QCSchema for {outputs}')
-        schema = identify_package(outputs)
-        out_schema = schema(outputs)
-        out_schema.parse_output()
-        out_schema.get_schema(debug=args.debug)  # Will trigger any errors before writing.
-        if out_schema.path not in error_files:
-             all_qcschemas.append(out_schema)
+        json_package = identify_package(outputs)
+        out_json = json_package(outputs)
+        out_json.get_json(debug=args.debug)  # Will trigger any errors before writing.
+        if out_json.path not in error_files:
+            all_qcsjsons.append(out_json)
     elif os.path.isdir(outputs):
         if outputs[-1] != '/':
             outputs += '/'
@@ -1201,27 +1339,27 @@ def main():
                     print(f'\n\u001b[36;1m{file_name}.json already exists.\u001b[0m')
                     continue
             print(f'\nMaking QCSchema for {file_name}')
-            schema = identify_package(outfile)
-            out_schema = schema(outfile)
-            out_schema.parse_output()
-            out_schema.get_schema(debug=args.debug)  # Will trigger any errors before writing.
-            if out_schema.path not in error_files:
-                all_qcschemas.append(out_schema)
+            json_package = identify_package(outfile)
+            out_json = json_package(outfile)
+            out_json.parse_output()
+            out_json.get_json(debug=args.debug)  # Will trigger any errors before writing.
+            if out_json.path not in error_files:
+                all_qcsjsons.append(out_json)
             
     else:
         raise ValueError(f'{outputs} is an unsupported type.')
     
-    print('\nWriting all valid QCSchemas')
-    for schema in all_qcschemas:
+    print('\nWriting all valid QCJSONs')
+    for out_json in all_qcsjsons:
         if save_dir == './':
-            abs_path = os.path.dirname(schema.path)
-            schema.write(
-                schema.name, schema.get_schema(debug=args.debug), abs_path,
+            abs_path = os.path.dirname(out_json.path)
+            out_json.write(
+                out_json.name, out_json.get_json(debug=args.debug), abs_path,
                 prettify=args.prettify
             )
         else:
-            schema.write(
-                schema.name, schema.get_schema(debug=args.debug), save_dir,
+            out_json.write(
+                out_json.name, out_json.get_json(debug=args.debug), save_dir,
                 prettify=args.prettify
             )
 
