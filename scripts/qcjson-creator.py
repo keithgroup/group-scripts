@@ -581,6 +581,8 @@ class orcaParser(outfileParser):
     def get_other_scf_energies(self, iteration=-1):
         """Other scf energy components.
 
+        This will be placed under the ``'properties'`` JSON property.
+
         Parameters
         ----------
         iteration: :obj:`int`, optional
@@ -630,6 +632,8 @@ class orcaParser(outfileParser):
     
     def get_other_mp_energies(self, iteration=-1):
         """Other MP energy components.
+
+        This will be placed under the ``'properties'`` JSON property.
 
         Parameters
         ----------
@@ -1087,7 +1091,10 @@ class orcaJSON(QCJSON):
                     keywords['dispersion'] = 'D3BJ'
                 else:
                     keywords['dispersion'] = kw
-                _remove_keywords.append(kw)
+                if kw not in _remove_keywords:
+                    _remove_keywords.append(kw)
+                else:
+                    break
             
             # Implicit solvent models
             if 'cpcm' in kw_lower or 'c-pcm' in kw_lower:
@@ -1098,29 +1105,47 @@ class orcaJSON(QCJSON):
                 if '(' in kw_lower and ')' == kw_lower[-1]:
                     solvent_name = kw_lower[:-1].split('(')[-1]
                     keywords['solvent_name'] = solvent_name
-                _remove_keywords.append(kw)
+                if kw not in _remove_keywords:
+                    _remove_keywords.append(kw)
+                else:
+                    break
             
             if kw_lower == 'frozencore':
                 keywords['frozencore'] = True
-                _remove_keywords.append(kw)
+                if kw not in _remove_keywords:
+                    _remove_keywords.append(kw)
+                else:
+                    break
             elif kw_lower == 'nofrozencore':
                 keywords['frozencore'] = False
-                _remove_keywords.append(kw)
+                if kw not in _remove_keywords:
+                    _remove_keywords.append(kw)
+                else:
+                    break
             
             if kw_lower in ['sloppyscf', 'loosescf', 'normalscf', 'strongscf',
                             'tightscf', 'verytightscf', 'extremescf'] \
                 or 'scfconv' in kw_lower:
                 keywords['scf_convergence_tolerance'] = kw[:-3]
-                _remove_keywords.append(kw)
+                if kw not in _remove_keywords:
+                    _remove_keywords.append(kw)
+                else:
+                    break
             
             # Removes SCF information (will be manually parsed from outfile).
             if 'ri' == kw_lower or 'rijcosx' in kw_lower or 'rijk' == kw_lower \
                or 'ri-jk' == kw_lower:
-                _remove_keywords.append(kw)
+                if kw not in _remove_keywords:
+                    _remove_keywords.append(kw)
+                else:
+                    break
             
             # Removes grid information (will be manually parsed from outfile).
             if 'grid' in kw_lower:
-                _remove_keywords.append(kw)
+                if kw not in _remove_keywords:
+                    _remove_keywords.append(kw)
+                else:
+                    break
         
         for kw in _remove_keywords:
             self.orca_keywords.remove(kw)
