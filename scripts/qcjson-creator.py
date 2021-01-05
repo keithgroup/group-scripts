@@ -734,17 +734,17 @@ class QCJSON:
         filename_with_extension = os.path.basename(self.outfile_path)
         self.path = os.path.abspath(self.outfile_path)
         self.name = '.'.join(filename_with_extension.split('.')[:-1])
-        self.outfile = cclib.io.ccread(self.outfile_path)
-        if self.outfile.atomcoords.shape[0] > 1:
+        self.cclib_data = cclib.io.ccread(self.outfile_path)
+        if self.cclib_data.atomcoords.shape[0] > 1:
             self.multiple = True
-        elif self.outfile.atomcoords.shape[0] == 1:
+        elif self.cclib_data.atomcoords.shape[0] == 1:
             self.multiple = False
     
     @property
     def schema(self):
         """Base QCSchema information.
         """
-        if not hasattr(self, 'outfile'):
+        if not hasattr(self, 'cclib_data'):
             raise AttributeError('No output file was parsed.')
         schema_dict = {
             'schema_name': 'qc_schema_output',
@@ -770,7 +770,7 @@ class QCJSON:
             SCF energy in Hartree.
         """
         scfenergy = cclib.parser.utils.convertor(
-            self.outfile.scfenergies[iteration], 'eV', 'hartree'
+            self.cclib_data.scfenergies[iteration], 'eV', 'hartree'
         )
         return scfenergy
     
@@ -788,7 +788,7 @@ class QCJSON:
             Dispersion energy correction in Hartree.
         """
         dispersion_energy = cclib.parser.utils.convertor(
-            self.outfile.dispersionenergies[iteration], 'eV', 'hartree'
+            self.cclib_data.dispersionenergies[iteration], 'eV', 'hartree'
         )
         return dispersion_energy
     
@@ -805,11 +805,11 @@ class QCJSON:
         :obj:`float`
             Total energy from highest order MP corrections.
         """
-        if self.outfile.mpenergies.ndim == 1:
-            mpenergy_ev = self.outfile.mpenergies[iteration]
-        elif self.outfile.mpenergies.ndim == 2:
-            order = self.outfile.mpenergies.shape[1] + 1
-            mpenergy_ev = self.outfile.mpenergies[iteration][order - 2]
+        if self.cclib_data.mpenergies.ndim == 1:
+            mpenergy_ev = self.cclib_data.mpenergies[iteration]
+        elif self.cclib_data.mpenergies.ndim == 2:
+            order = self.cclib_data.mpenergies.shape[1] + 1
+            mpenergy_ev = self.cclib_data.mpenergies[iteration][order - 2]
         mpenergy_hartree = cclib.parser.utils.convertor(
             mpenergy_ev, 'eV', 'hartree'
         )
@@ -831,7 +831,7 @@ class QCJSON:
             CC energy in Hartree.
         """
         ccenergy = cclib.parser.utils.convertor(
-            self.outfile.ccenergies[iteration], 'eV', 'hartree'
+            self.cclib_data.ccenergies[iteration], 'eV', 'hartree'
         )
         return ccenergy
 
@@ -868,6 +868,7 @@ class orcaJSON(QCJSON):
         super().__init__()
         self.outfile_path = outfile_path
         self.parser = orcaParser(outfile_path)
+        self.parse_output()
     
     def get_topology(self, iteration=-1):
         """A full description of the overall molecule its geometry, fragments,
@@ -904,13 +905,13 @@ class orcaJSON(QCJSON):
         try:
             topology = {
                 'molecule': {
-                    'geometry' : self.outfile.atomcoords[iteration],
-                    'symbols': atoms_by_element(self.outfile.atomnos.tolist())
+                    'geometry' : self.cclib_data.atomcoords[iteration],
+                    'symbols': atoms_by_element(self.cclib_data.atomnos.tolist())
                 },
-                'molecular_charge': self.outfile.charge,
-                'molecular_multiplicity': self.outfile.mult,
+                'molecular_charge': self.cclib_data.charge,
+                'molecular_multiplicity': self.cclib_data.mult,
                 'name': self.name,
-                'atomic_numbers': self.outfile.atomnos
+                'atomic_numbers': self.cclib_data.atomnos
             }
         except:
             error_out(self.path, 'Topology data not succussfully parsed.')
@@ -971,6 +972,7 @@ class orcaJSON(QCJSON):
             if kw_lower in basis_sets['orca']:
                 model['basis'] = kw
                 _remove_keywords.append(kw)
+                break
         
         for kw in _remove_keywords:
             self.orca_keywords.remove(kw)
@@ -998,7 +1000,7 @@ class orcaJSON(QCJSON):
                 Implicit (i.e., continuum) solvent model used in job.
             ``'solvent_name'``
                 Name of the solvent (e.g., ``'water'``).
-            ``'frozencore'``
+            ``'frozen_core'``
                 If the FrozenCore approximation was used. This defaults to
                 ``True`` for MP and CC calculations in ORCA.
             ``'scf_convergence_tolerance'``
@@ -1013,7 +1015,7 @@ class orcaJSON(QCJSON):
 
             # Empirical dispersion
             if kw_lower in ['d4', 'd3bj', 'd3', 'd3zero', 'd2']:
-                if version.parse(self.outfile.metadata['package_version']) \
+                if version.parse(self.cclib_data.metadata['package_version']) \
                    >= version.parse('4.0.0') and kw_lower == 'd3':
                     # In ORCA 4, D3 is D3BJ
                     keywords['dispersion'] = 'D3BJ'
@@ -1023,7 +1025,7 @@ class orcaJSON(QCJSON):
             
             # Implicit solvent models
             if 'cpcm' in kw_lower or 'c-pcm' in kw_lower:
-                if 'smd' in self.outfile.metadata['input_file_contents']:
+                if 'smd' in self.cclib_data.metadata['input_file_contents']:
                     keywords['implicit_solvent'] = 'SMD'
                 else:
                     keywords['implicit_solvent'] = 'CPCM'
@@ -1063,15 +1065,15 @@ class orcaJSON(QCJSON):
         
         # Specifies if FrozenCore is used in MP or CC jobs.
         if self.method_type == 'moller-plesset':
-            if version.parse(self.outfile.metadata['package_version']) \
+            if version.parse(self.cclib_data.metadata['package_version']) \
                 >= version.parse('4.0.0'):
                 lower_list = [i.lower() for i in self.orca_keywords]
                 if 'nofrozencore' in lower_list:
-                    keywords['frozencore'] = False
+                    keywords['frozen_core'] = False
                     self.orca_keywords.pop(lower_list.index('nofrozencore'))
                 else:
                     if 'frozencore' not in keywords.keys():
-                        keywords['frozencore'] = True
+                        keywords['frozen_core'] = True
 
         # Add uncategorized calculation properties
         if len(self.orca_keywords) != 0:
@@ -1114,9 +1116,9 @@ class orcaJSON(QCJSON):
                 iteration=iteration
             )
             properties['scf_dispersion_correction_energy'] = cclib.parser.utils.convertor(
-                self.outfile.dispersionenergies[iteration], 'eV', 'hartree'
+                self.cclib_data.dispersionenergies[iteration], 'eV', 'hartree'
             )
-            properties['scf_iterations'] = self.outfile.scfvalues[0].shape[0]
+            properties['scf_iterations'] = self.cclib_data.scfvalues[0].shape[0]
         elif self.method_type == 'moller-plesset':
             properties['scf_total_energy'] = self._get_scf_energy(
                 iteration=iteration
@@ -1132,8 +1134,8 @@ class orcaJSON(QCJSON):
             pass
         else:
             error_out(self.path, 'Unknown method type.')
-        properties['calcinfo_nbasis'] = self.outfile.nbasis
-        properties['calcinfo_nmo'] = self.outfile.nmo
+        properties['calcinfo_nbasis'] = self.cclib_data.nbasis
+        properties['calcinfo_nmo'] = self.cclib_data.nmo
 
         # Gets other SCF energy components like nuclear repulsion and
         # one-electorn energy.
@@ -1179,8 +1181,8 @@ class orcaJSON(QCJSON):
                 self.calc_driver = 'gradient'
                 driver['driver'] = self.calc_driver
 
-                if self.outfile.grads.ndim == 3:
-                    grads = self.outfile.grads[iteration]
+                if self.cclib_data.grads.ndim == 3:
+                    grads = self.cclib_data.grads[iteration]
                 else:
                     raise ValueError('Please check gradient dimensions.')
                 driver['return_result'] = convert_forces(
@@ -1217,13 +1219,13 @@ class orcaJSON(QCJSON):
         if not hasattr(self, 'calc_driver') or self.calc_driver == 'energy':
             self.calc_driver = 'energy'
             driver['driver'] = self.calc_driver
-            if hasattr(self.outfile, 'ccenergies'):
-                return_result = self.outfile.ccenergies[iteration]
-            elif hasattr(self.outfile, 'mpenergies'):
+            if hasattr(self.cclib_data, 'ccenergies'):
+                return_result = self.cclib_data.ccenergies[iteration]
+            elif hasattr(self.cclib_data, 'mpenergies'):
                 return_result = self._get_mp_energy(
                 iteration=iteration
             )
-            elif hasattr(self.outfile, 'scfenergies'):
+            elif hasattr(self.cclib_data, 'scfenergies'):
                 return_result = self._get_scf_energy(
                     iteration=iteration
                 )
@@ -1251,7 +1253,7 @@ class orcaJSON(QCJSON):
         """
         provenance = {
             'creator': 'ORCA',
-            'version': self.outfile.metadata['package_version']
+            'version': self.cclib_data.metadata['package_version']
         }
         return provenance
     
@@ -1265,15 +1267,15 @@ class orcaJSON(QCJSON):
         if not hasattr(self, '_json'):
 
             all_jsons = []
-            self.orca_keywords = self.outfile.metadata['keywords']
-            for i in range(0, self.outfile.atomcoords.shape[0]):
+            self.orca_keywords = self.cclib_data.metadata['keywords']
+            for i in range(0, self.cclib_data.atomcoords.shape[0]):
                 # Optimizations are iterative with only a single set of
                 # keywords; this is different than consecutive jobs (e.g., 
                 # energies) that have repeated keywords. So, we reinitialzie the
                 # keywords for each optimization iteration.
                 if hasattr(self, 'calc_driver') \
                    and self.calc_driver == 'optimization':
-                    self.orca_keywords = self.outfile.metadata['keywords']
+                    self.orca_keywords = self.cclib_data.metadata['keywords']
                 try:
                     all_jsons.append(super().schema)
                     all_jsons[-1]['provenance'] = self.get_provenance()
@@ -1286,7 +1288,7 @@ class orcaJSON(QCJSON):
                     all_jsons[-1]['model'] = self.get_model(iteration=i)
                     all_jsons[-1]['keywords'] = self.get_keywords(iteration=i)
                     all_jsons[-1]['properties'] = self.get_properties(iteration=i)
-                    all_jsons[-1]['success'] = self.outfile.metadata['success']
+                    all_jsons[-1]['success'] = self.cclib_data.metadata['success']
                     if len(all_jsons) == 1:
                         self._json = all_jsons[0]
                     else:
@@ -1441,7 +1443,6 @@ def main():
             print(f'\nMaking QCSchema for {file_name}')
             json_package = identify_package(outfile)
             out_json = json_package(outfile)
-            out_json.parse_output()
             out_json.get_json(debug=args.debug)  # Will trigger any errors before writing.
             if out_json.path not in error_files:
                 all_qcsjsons.append(out_json)
