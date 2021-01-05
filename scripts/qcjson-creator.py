@@ -25,11 +25,12 @@
 __version__ = "0.0.1"
 
 """
-# QCSchema Creator
+# QCJSON Creator
 
-Create QCSchema files (https://github.com/MolSSI/QCSchema) from output files.
-This script uses cclib (https://github.com/cclib/cclib) to parse
-data and implements custom parsers to retrive other information.
+Create QCJSONs from output files using the QCSchema
+(https://github.com/MolSSI/QCSchema). This script uses cclib
+(https://github.com/cclib/cclib) to parse data and implements custom parsers to
+retrive other information.
 
 Unofficial modifications are made to QCSchema to meet the immediate needs of
 our research. These modications are 
@@ -62,7 +63,7 @@ and this project adheres to
 ### Changed
 - Nest iterations into a list instead of having int labels.
 - Standardized getting SCF, MP, and CC energies from cclib.
-- Requires outfile path to initialize schema classes.
+- Requires outfile path to initialize json classes.
 
 ## [0.0.1] - 2021-01-03
 ### Added
@@ -456,7 +457,7 @@ class orcaParser(outfileParser):
             grid_info['final_grid_level'] = grid_info['scf_grid_level']
         return grid_info
     
-    def _parse_other_scf(self, outfile, scf_info):
+    def _parse_other_scf_energies(self, outfile, scf_info):
         """The nulear repulsion, one- and two-electron energy, and
         exchange-correlation energy after a SCF cycle.
 
@@ -529,7 +530,7 @@ class orcaParser(outfileParser):
         
         return scf_info
     
-    def _parse_other_mp(self, outfile, mp_info):
+    def _parse_other_mp_energies(self, outfile, mp_info):
         """Moller-Plesset calculation properties.
 
         This is called directly after the ``'ORCA  MP2 '`` trigger, and 
@@ -572,7 +573,7 @@ class orcaParser(outfileParser):
         
         return mp_info
     
-    def get_scf_info(self, iteration=-1):
+    def get_other_scf_energies(self, iteration=-1):
         """Other scf energy components.
 
         Parameters
@@ -611,7 +612,9 @@ class orcaParser(outfileParser):
                         # Thus, we separated the parsing trigger and the actual
                         # parsing of the SCF energies. That way, the entire
                         # file is parsed instead of stopping at the first one.
-                        scf_info = self._parse_other_scf(outfile, scf_info)
+                        scf_info = self._parse_other_scf_energies(
+                            outfile, scf_info
+                        )
 
             self._scf_info = scf_info
         
@@ -620,7 +623,7 @@ class orcaParser(outfileParser):
             scf_info_iter[k] = v[iteration]
         return scf_info_iter
     
-    def get_mp_info(self, iteration=-1):
+    def get_other_mp_energies(self, iteration=-1):
         """Other MP energy components.
 
         Parameters
@@ -652,7 +655,7 @@ class orcaParser(outfileParser):
                         # Thus, we separated the parsing trigger and the actual
                         # parsing of the MP2 energies. That way, the entire
                         # file is parsed instead of stopping at the first one.
-                        mp_info = self._parse_other_mp(outfile, mp_info)
+                        mp_info = self._parse_other_mp_energies(outfile, mp_info)
 
             self._mp_info = mp_info
         
@@ -671,29 +674,29 @@ class orcaParser(outfileParser):
 
 
 
-### QCSchema classes ###
+### QCJSON classes ###
 
 class QCJSON:
-    """Base quantum chemistry schema.
+    """Base quantum chemistry JSON class.
 
     Attributes
     ----------
     outfile : :obj:'cclib.parser.data.ccData_optdone_bool'
         Parsed data from output file.
     name : :obj:`str`
-        Name identifying the QCschema. Defaults to ``'schema'`` until an output
+        Name identifying the QCJSON. Defaults to ``'qcschema'`` until an output
         file is parsed by cclib.
     path : :obj:`str`
         Absolute path to the output file.
     multiple_iterations : :obj:`bool`
-        If the QCSchema is from a calculation with multiple iterations.
+        If the QCJSON is from a calculation with multiple iterations.
     """
 
     def __init__(self):
-        self.name = 'schema'
+        self.name = 'qcschema'
 
-    def write(self, name, schema_dict, save_dir, prettify=True):
-        """Writes QCSchema json.
+    def write(self, name, json_dict, save_dir, prettify=True):
+        """Writes JSON.
 
         Parameters
         ----------
@@ -709,12 +712,12 @@ class QCJSON:
             save_dir += '/'
         if prettify:
             json_string = json.dumps(
-                schema_dict, cls=cclib.io.cjsonwriter.JSONIndentEncoder,
+                json_dict, cls=cclib.io.cjsonwriter.JSONIndentEncoder,
                 sort_keys=True, indent=4
             )
         else:
             json_string = json.dumps(
-                schema_dict, cls=cclib.io.cjsonwriter.NumpyAwareJSONEncoder,
+                json_dict, cls=cclib.io.cjsonwriter.NumpyAwareJSONEncoder,
                 sort_keys=True
             )
         with open(f'{save_dir}{name}.json', 'w') as f:
@@ -746,7 +749,7 @@ class QCJSON:
         schema_dict = {
             'schema_name': 'qc_schema_output',
             'schema_version': 1,
-            'qcschema_creator_version': __version__
+            'qcjson_creator_version': __version__
         }
         return schema_dict
     
@@ -837,7 +840,7 @@ class QCJSON:
 
 
 class orcaJSON(QCJSON):
-    """ORCA specific QCSchema information.
+    """ORCA specific QCJSON information.
 
     Supported calculation types:
 
@@ -1039,7 +1042,7 @@ class orcaJSON(QCJSON):
             if kw_lower in ['sloppyscf', 'loosescf', 'normalscf', 'strongscf',
                             'tightscf', 'verytightscf', 'extremescf'] \
                 or 'scfconv' in kw_lower:
-                keywords['scf_convergence_tolerance'] = kw
+                keywords['scf_convergence_tolerance'] = kw[:-3]
                 _remove_keywords.append(kw)
             
             # Removes grid information (will be manually parsed from outfile).
@@ -1122,7 +1125,7 @@ class orcaJSON(QCJSON):
                 iteration=iteration
             )
             properties = {
-                **properties, **self.parser.get_mp_info(iteration=iteration)
+                **properties, **self.parser.get_other_mp_energies(iteration=iteration)
             }
         elif self.method_type == 'coupled cluster':
             # TODO
@@ -1131,9 +1134,16 @@ class orcaJSON(QCJSON):
             error_out(self.path, 'Unknown method type.')
         properties['calcinfo_nbasis'] = self.outfile.nbasis
         properties['calcinfo_nmo'] = self.outfile.nmo
-        properties = {
-            **properties, **self.parser.get_scf_info(iteration=iteration)
-        }
+
+        # Gets other SCF energy components like nuclear repulsion and
+        # one-electorn energy.
+        # ORCA optimizations do not always include the components, so it is not
+        # included.
+        if self.calc_driver != 'optimization':
+            properties = {
+                **properties, **self.parser.get_other_scf_energies(iteration=iteration)
+            }
+        
         return properties
     
     def get_driver(self, iteration=-1):
@@ -1199,11 +1209,12 @@ class orcaJSON(QCJSON):
             # Energies
             elif kw_lower == 'energy' or kw_lower == 'sp':
                 # This driver will be captured by the len(driver) == 0 condition.
+                self.calc_driver = 'energy'
                 _remove_keywords.append(kw)
                 break
         
         # ORCA defaults to single-point energies if no keyword is present.
-        if len(driver) == 0:
+        if not hasattr(self, 'calc_driver') or self.calc_driver == 'energy':
             self.calc_driver = 'energy'
             driver['driver'] = self.calc_driver
             if hasattr(self.outfile, 'ccenergies'):
@@ -1245,13 +1256,13 @@ class orcaJSON(QCJSON):
         return provenance
     
     def get_json(self, debug=False):
-        """QC schema of an ORCA output file.
+        """QCJSON of an ORCA output file.
 
         Calculations supported: single-point energies, gradients, optimizations.
 
         :type: :obj:`dict`
         """
-        if not hasattr(self, '_schema'):
+        if not hasattr(self, '_json'):
 
             all_jsons = []
             self.orca_keywords = self.outfile.metadata['keywords']
@@ -1277,18 +1288,19 @@ class orcaJSON(QCJSON):
                     all_jsons[-1]['properties'] = self.get_properties(iteration=i)
                     all_jsons[-1]['success'] = self.outfile.metadata['success']
                     if len(all_jsons) == 1:
-                        self._schema = all_jsons[0]
+                        self._json = all_jsons[0]
                     else:
-                        self._schema = all_jsons
+                        self._json = all_jsons
                 except:
                     if debug:
                         raise
                     else:
                         if self.path not in error_files:
                             error_out(self.path, 'Uncaught exceptions.')
-                        self._schema = all_jsons
+                        self._json = all_jsons
                         break
-        return self._schema
+        
+        return self._json
 
 
 
@@ -1341,7 +1353,7 @@ def error_out(outfile, error_message):
 def main():
     
     parser = argparse.ArgumentParser(
-        description='Creates QCSchema json files from output files. Files must '
+        description='Creates QCJSONs from output files using QCSchemas. Files must '
                     'have "out" somewhere in the file name or as an extension.'
     )
     parser.add_argument(
@@ -1362,7 +1374,7 @@ def main():
     )
     parser.add_argument(
         '-r', '--recursive', action='store_true',
-        help='Recursively create schemas.'
+        help='Recursively create JSONs.'
     )
     parser.add_argument(
         '-o', '--overwrite', action='store_true', help='Overwrite JSON files'
@@ -1381,7 +1393,7 @@ def main():
         help='Will not continue if an error is encountered'
     )
     args = parser.parse_args()
-    print(f'QCSchema creator v{__version__}')
+    print(f'QCJSON creator v{__version__}')
     print('Written by Alex M. Maldonado (@aalexmmaldonado)')
     print('Parsed data are converted to Hartrees and Angstroms\n')
 
