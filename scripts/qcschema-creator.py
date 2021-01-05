@@ -50,7 +50,8 @@ and this project adheres to
 ## [Unreleased]
 
 ### Added
-- Custom parser for ORCA information such as integration grid.
+- Custom parser for ORCA information such as integration grid, scf energy
+  contributions (e.g., one-electron and two-electron energies).
 - Debug option to raise errors instead of skipping over files.
 
 ### Changed
@@ -439,10 +440,101 @@ class orcaParser(outfileParser):
                         line = next(outfile)
                     lebedev_num = line.strip().split('-')[-1]
                     grid_info['final_grid_level'] = lebedev_to_level[lebedev_num]
+                    continue
         
         if 'final_grid_level' not in grid_info.keys():
             grid_info['final_grid_level'] = grid_info['scf_grid_level']
         return grid_info
+    
+    def _parse_other_scf(self, outfile, scf_info):
+        """
+
+        Parameters
+        ----------
+        outfile
+            Open output file.
+        """
+        for line in outfile:
+            # Nuclear Repulsion  :  135.87324654 Eh    3697.29901 eV
+            if 'Nuclear Repulsion' in line:
+                if 'nuclear_repulsion_energy' not in scf_info.keys():
+                    scf_info['nuclear_repulsion_energy'] = []
+                scf_info['nuclear_repulsion_energy'].append(
+                    float(line.split()[3])
+                )
+
+            # One Electron Energy: -674.26034691 Eh  -18347.55681 eV
+            if 'One Electron Energy' in line:
+                if 'scf_one_electron_energy' not in scf_info.keys():
+                    scf_info['scf_one_electron_energy'] = []
+                scf_info['scf_one_electron_energy'].append(
+                    float(line.split()[3])
+                )
+
+            # Two Electron Energy:  245.90403408 Eh    6691.38895 eV
+            if 'Two Electron Energy' in line:
+                if 'scf_two_electron_energy' not in scf_info.keys():
+                    scf_info['scf_two_electron_energy'] = []
+                scf_info['scf_two_electron_energy'].append(
+                    float(line.split()[3])
+                )
+
+            # E(XC)   :    -26.170406641397 Eh
+            if 'E(XC)' in line:
+                if 'scf_xc_energy' not in scf_info.keys():
+                    scf_info['scf_xc_energy'] = []
+                scf_info['scf_xc_energy'].append(
+                    float(line.split()[2])
+                )
+
+            if 'SCF CONVERGENCE' == line.strip():
+                break
+        
+        return scf_info
+    
+    def get_scf_info(self, iteration=-1):
+        """Other scf energy components.
+
+        Parameters
+        ----------
+        iteration: :obj:`int`, optional
+            Defaults to the last iteration.
+
+        Returns
+        -------
+        :obj:`dict`
+            Contains grid information using the following keys:
+
+            ``'scf_one_electron_energy'``
+                The one-electron (core Hamiltonian) energy contribution to the
+                total SCF energy.
+            ``'scf_two_electron_energy'``
+                The two-electron energy contribution to the total SCF energy.
+            ``'nuclear_repulsion_energy'``
+                The nuclear repulsion energy contribution to the total SCF
+                energy.
+            ``'scf_xc_energy'``
+                The functional energy contribution to the total SCF energy.
+        """
+        
+        if not hasattr(self, 'scf_info'):
+            scf_info = {}
+            with open(self.outfile_path, mode='r') as outfile:
+                for line in outfile:
+
+                    # ----------------
+                    # TOTAL SCF ENERGY
+                    # ----------------
+                    if 'TOTAL SCF ENERGY' == line.strip():
+                        scf_info = self._parse_other_scf(outfile, scf_info)
+
+            self._scf_info = scf_info
+        
+        scf_info_iter = {}
+        for k, v in self._scf_info.items():
+            scf_info_iter[k] = v[iteration]
+        return scf_info_iter
+
 
 
 
@@ -845,6 +937,9 @@ class orcaSchema(QCSchema):
             error_out(self.path, 'Unknown method type.')
         properties['calcinfo_nbasis'] = self.outfile.nbasis
         properties['calcinfo_nmo'] = self.outfile.nmo
+        properties = {
+            **properties, **self.parser.get_scf_info(iteration=iteration)
+        }
         return properties
     
     def get_driver(self, iteration=-1):
