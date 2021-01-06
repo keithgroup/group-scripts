@@ -22,7 +22,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 """
 # QCJSON Creator
@@ -54,6 +54,10 @@ and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.1.1] - 2021-01-06
+### Fixed
+- cclib version requirement
 
 ## [0.1.0] - 2021-01-05
 ### Added
@@ -1461,7 +1465,7 @@ def cclib_version_check():
     1.6.4. However, the __version__ property was incorrect until version 1.7.
     """
     cclib_version = cclib.__version__
-    if version.parse(cclib_version) < version.parse('1.6.1'):
+    if version.parse(cclib_version) < version.parse('1.7'):
         raise ValueError(
             f'cclib version is {cclib_version}; need 1.7 or higher.'
         )
