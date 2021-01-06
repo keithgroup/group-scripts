@@ -56,6 +56,7 @@ and this project adheres to
 ## [Unreleased]
 ### Added
 - Alpha and beta electron HOMO and LUMO information.
+- 'return_energy' property regardless of driver.
 
 ### Changed
 - Write each JSON file directly after parsing instead of all at the end. That
@@ -1224,6 +1225,7 @@ class orcaJSON(QCJSON):
             properties['scf_total_energy'] = self._get_scf_energy(
                 iteration=iteration
             )
+            properties['return_energy'] = properties['scf_total_energy']
             properties['scf_dispersion_correction_energy'] = cclib.parser.utils.convertor(
                 self.cclib_data.dispersionenergies[iteration], 'eV', 'hartree'
             )
@@ -1235,6 +1237,7 @@ class orcaJSON(QCJSON):
             properties['mp2_total_energy'] = self._get_mp_energy(
                 iteration=iteration
             )
+            properties['return_energy'] = properties['mp2_total_energy']
             properties = {
                 **properties, **self.parser.get_other_mp_energies(iteration=iteration)
             }
