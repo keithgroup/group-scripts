@@ -54,13 +54,6 @@ and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-### Added
-- Alpha and beta electron HOMO and LUMO information.
-- 'return_energy' property regardless of driver.
-
-### Changed
-- Write each JSON file directly after parsing instead of all at the end. That
-  way if the script crashes the proceeding JSON files are already written.
 
 ## [0.1.0] - 2021-01-05
 ### Added
@@ -68,11 +61,15 @@ and this project adheres to
   contributions (e.g., one-electron and two-electron energies), MP2 correlation
   energies, RI approximations.
 - Debug option to raise errors instead of skipping over files.
+- Alpha and beta electron HOMO and LUMO information.
+- 'return_energy' property regardless of driver.
 
 ### Changed
 - Nest iterations into a list instead of having int labels.
 - Standardized getting SCF, MP, and CC energies from cclib.
 - Requires outfile path to initialize json classes.
+- Write each JSON file directly after parsing instead of all at the end. That
+  way if the script crashes the proceeding JSON files are already written.
 
 ## [0.0.1] - 2021-01-03
 ### Added
