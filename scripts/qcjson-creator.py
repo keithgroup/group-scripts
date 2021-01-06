@@ -53,6 +53,9 @@ and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Changed
+- Write each JSON file directly after parsing instead of all at the end. That
+  way if the script crashes the proceeding JSON files are already written.
 
 ## [0.1.0] - 2021-01-05
 ### Added
@@ -1506,19 +1509,28 @@ def main():
 
     cclib_version_check()
 
-    all_qcsjsons = []
-
     save_dir = args.save_dir
     if save_dir[-1] != '/':
         save_dir += '/'
     outputs = args.outputs
+
+    # A file was provided for the outputs.
     if os.path.isfile(outputs):
         print(f'Making QCJSON for {outputs}')
         json_package = identify_package(outputs)
         out_json = json_package(outputs)
-        out_json.get_json(debug=args.debug)  # Will trigger any errors before writing.
+        json_dict = out_json.get_json(debug=args.debug)
         if out_json.path not in error_files:
-            all_qcsjsons.append(out_json)
+            if save_dir == './':
+                abs_path = os.path.dirname(out_json.path)
+            else:
+                abs_path = save_dir
+            
+            out_json.write(
+                out_json.name, json_dict, save_dir, prettify=args.prettify
+            )
+    
+    # A directory was provided for the outputs.
     elif os.path.isdir(outputs):
         if outputs[-1] != '/':
             outputs += '/'
@@ -1538,39 +1550,37 @@ def main():
                 abs_path = os.path.dirname(os.path.abspath(outfile))
                 if not args.overwrite \
                    and os.path.exists(f'{abs_path}/{file_name}.json'):
-                    print(f'\n\u001b[36;1m{file_name}.json already exists.\u001b[0m')
+                    print(
+                        f'\n\u001b[36;1m{file_name}.json already exists.\u001b[0m'
+                    )
                     continue
             else:
                 if not args.overwrite \
                    and os.path.exists(f'{save_dir}/{file_name}.json'):
-                    print(f'\n\u001b[36;1m{file_name}.json already exists.\u001b[0m')
+                    print(
+                        f'\n\u001b[36;1m{file_name}.json already exists.\u001b[0m'
+                    )
                     continue
-            print(f'\nMaking QCJSONs for {file_name}')
+            print(f'\nMaking QCJSON for {file_name}')
             json_package = identify_package(outfile)
             out_json = json_package(outfile)
-            out_json.get_json(debug=args.debug)  # Will trigger any errors before writing.
+            json_dict = out_json.get_json(debug=args.debug)
             if out_json.path not in error_files:
-                all_qcsjsons.append(out_json)
+                if save_dir == './':
+                    abs_path = os.path.dirname(out_json.path)
+                else:
+                    abs_path = save_dir
+                
+                out_json.write(
+                    out_json.name, json_dict, save_dir, prettify=args.prettify
+                )
+            
+        if args.combine:
+            # TODO
+            pass
             
     else:
         raise ValueError(f'{outputs} is an unsupported type.')
-    
-    print('\nWriting all valid QCJSONs')
-    for out_json in all_qcsjsons:
-        if save_dir == './':
-            abs_path = os.path.dirname(out_json.path)
-            out_json.write(
-                out_json.name, out_json.get_json(debug=args.debug), abs_path,
-                prettify=args.prettify
-            )
-        else:
-            out_json.write(
-                out_json.name, out_json.get_json(debug=args.debug), save_dir,
-                prettify=args.prettify
-            )
-
-    if args.combine:
-        pass
     
     print(f'\n{len(error_files)} file(s) encountered errors and not written')
     for i in error_files:
