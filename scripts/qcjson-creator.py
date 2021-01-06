@@ -57,7 +57,10 @@ and this project adheres to
 
 ## [0.1.1] - 2021-01-06
 ### Fixed
-- cclib version requirement
+- cclib version requirement.
+- Recursive option would save in current directory and not in the same directory
+  of the output file.
+- get_json would incorrectly catch KeyboardInterrupt exception.
 
 ## [0.1.0] - 2021-01-05
 ### Added
@@ -1431,7 +1434,7 @@ class orcaJSON(QCJSON):
                         self._json = all_jsons[0]
                     else:
                         self._json = all_jsons
-                except:
+                except Exception:
                     if debug:
                         raise
                     else:
@@ -1602,7 +1605,7 @@ def main():
                     abs_path = save_dir
                 
                 out_json.write(
-                    out_json.name, json_dict, save_dir, prettify=args.prettify
+                    out_json.name, json_dict, abs_path, prettify=args.prettify
                 )
             
         if args.combine:
