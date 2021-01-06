@@ -41,6 +41,7 @@ At of the time of writing (2021-01-03), there has been no concensus of
 how to manage these files. Our immediate solution is to list each QCSchema
 inside a list (i.e., [{},{},{}, ...]). Furthermore, only iterations that have
 the same topology are supported (no checks are provided).
+- Other information with keywords not defined in the QCSchema.
 
 ## Requirements
 - cclib (>=1.7)
@@ -53,6 +54,9 @@ and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- Alpha and beta electron HOMO and LUMO information.
+
 ### Changed
 - Write each JSON file directly after parsing instead of all at the end. That
   way if the script crashes the proceeding JSON files are already written.
@@ -1250,6 +1254,28 @@ class orcaJSON(QCJSON):
             properties = {
                 **properties, **self.parser.get_other_scf_energies(iteration=iteration)
             }
+        
+        # Alpha and beta electron properties
+        homo_idx_alpha = int(self.cclib_data.homos[0])
+        homo_idx_beta = int(self.cclib_data.homos[-1])
+        alpha_homo_energy = cclib.parser.utils.convertor(
+            self.cclib_data.moenergies[0][homo_idx_alpha], 'eV', 'hartree'
+        )
+        alpha_lumo_energy = cclib.parser.utils.convertor(
+            self.cclib_data.moenergies[0][homo_idx_alpha + 1], 'eV', 'hartree'
+        )
+        alpha_gap_energy = alpha_lumo_energy - alpha_homo_energy
+        beta_homo_energy = cclib.parser.utils.convertor(
+            self.cclib_data.moenergies[-1][homo_idx_beta], 'eV', 'hartree'
+        )
+        beta_lumo_energy = cclib.parser.utils.convertor(
+            self.cclib_data.moenergies[-1][homo_idx_beta + 1], 'eV', 'hartree'
+        )
+        beta_gap_energy = beta_lumo_energy - beta_homo_energy
+        properties['alpha_homo_energy'] = alpha_homo_energy
+        properties['alpha_homo_lumo_gap_energy'] = alpha_gap_energy
+        properties['beta_homo_energy'] = beta_homo_energy
+        properties['beta_homo_lumo_gap_energy'] = beta_gap_energy
         
         return properties
     
