@@ -29,42 +29,47 @@ import subprocess
 import argparse
 
 
-def get_files(path, expression):
+def get_files(path, expression, recursive=True):
     """Returns paths to all files in a given directory that matches a provided
     expression in the file name. Commonly used to find all files of a certain
     type, e.g. output or xyz files.
     
     Parameters
     ----------
-    path : str
+    path : :obj:`str`
         Specifies the directory to search.
-    expression : str
+    expression : :obj:`str`
         Expression to be tested against all file names in 'path'.
+    recursive :obj:`bool`, optional
+        Recursively find all files in all subdirectories.
     
     Returns
     -------
-    list
+    :obj:`list` [:obj:`str`]
         All absolute paths to files matching the provided expression.
     """
     if path[-1] != '/':
         path += '/'
-    
-    all_files = []
-    for (dirpath, _, filenames) in os.walk(path):
-        index = 0
-        while index < len(filenames):
-            if dirpath[-1] != '/':
-                dirpath += '/'
-            filenames[index] = dirpath + filenames[index]
-            index += 1
-
-        all_files.extend(filenames)
-        
-    files = []
-    for file in all_files:
-        if expression in file:
-            files.append(file)
-
+    if recursive:
+        all_files = []
+        for (dirpath, _, filenames) in os.walk(path):
+            index = 0
+            while index < len(filenames):
+                if dirpath[-1] != '/':
+                    dirpath += '/'
+                filenames[index] = dirpath + filenames[index]
+                index += 1
+            all_files.extend(filenames)
+        files = []
+        for f in all_files:
+            if expression in f:
+                files.append(f)
+    else:
+        files = []
+        for f in os.listdir(path):
+            filename = os.path.basename(f)
+            if expression in filename:
+                files.append(os.path.abspath(f))
     return files
 
 
@@ -74,35 +79,40 @@ def main():
         description='Submit calculations using the slurm command "sbatch"'
     )
     parser.add_argument(
-        'dirs', metavar='dirs', nargs='+', default='',
-        help='directories containing calculations to be submitted'
+        'dir_path', metavar='dir_path', nargs='?',
+        help='path to directory containing calculations to be submitted'
     )
     parser.add_argument(
-        '--submit_string', nargs=1, default='slurm',
+        '--submit_string', nargs='?', default='slurm',
         help='search string for submission scripts, defaults to slurm'
     )
     args = parser.parse_args()
 
-    # Submits calculations in every direction
-    for directory in args.dirs:
-        os.chdir(directory)
-        all_jobs_list = get_files(directory, args.submit_string[0])
-        for job_path in all_jobs_list:
+    # Prepares directory information
+    dir_path = os.path.abspath(args.dir_path)
+    if dir_path[-1] != '/':
+        dir_path += '/'
 
-            slurm_file = job_path.split('/')[-1]
-            job_directory = '/'.join(job_path.split('/')[:-1])
+    
+    os.chdir(dir_path)
+    all_jobs_list = get_files(dir_path, args.submit_string)
+    
+    for job_path in all_jobs_list:
 
-            print('Submitting job in ' + job_path.split('/')[-2] + ' folder')
-            os.chdir(job_directory)
-            bash_command = 'sbatch ' + slurm_file
-            process = subprocess.Popen(
-                bash_command.split(), stdout=subprocess.PIPE
-            )
-            _, error = process.communicate()
+        slurm_file = job_path.split('/')[-1]
+        job_directory = '/'.join(job_path.split('/')[:-1])
 
-            if error is not None:
-                print('Job not submitted successfully. Error:')
-                print(str(error))
+        print('Submitting job in ' + job_path.split('/')[-2] + ' directory')
+        os.chdir(job_directory)
+        bash_command = 'sbatch ' + slurm_file
+        process = subprocess.Popen(
+            bash_command.split(), stdout=subprocess.PIPE
+        )
+        _, error = process.communicate()
+
+        if error is not None:
+            print('Job not submitted successfully. Error:')
+            print(str(error))
 
 
 if __name__ == "__main__":
