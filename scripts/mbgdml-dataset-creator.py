@@ -197,20 +197,20 @@ def main():
 
     parser = argparse.ArgumentParser(
         description='Creates NumPy npz data set using the mbGDML format from '
-                    'QCJSONs from the qcjson-creator.py script.'
+                    'QCJSONs from the qcjson-creator.py script. '
                     'Should only be used for systems containing the same atoms.'
     )
     parser.add_argument(
         'search_dir', metavar='search_dir', type=str, nargs='?', default='.',
-        help='Path to start searching for QCJSONs.'
+        help='Path to start searching for QCJSONs. Defaults to current direcotry.'
     )
     parser.add_argument(
         '--name', metavar='name', type=str, nargs='?', default='dataset',
-        help='File name for the npz data set.'
+        help='File name for the npz data set. Defaults to dataset.'
     )
     parser.add_argument(
         '--save_dir', metavar='save_dir', type=str, nargs='?', default='.',
-        help='Path to save npz data set.'
+        help='Path to save npz data set. Defaults to current directory.'
     )
     parser.add_argument(
         '-r', '--recursive', action='store_true',
@@ -221,13 +221,13 @@ def main():
     )
     parser.add_argument(
         '--remove', metavar='remove_files', nargs='+', default='',
-        help='Ignore paths matching words in this string.'
+        help='Ignore paths that contain at least one of these words.'
     )
 
     args = parser.parse_args()
 
     print('Making data sets from QCJSONs')
-    print('Written by Alex M. Maldonado (@aalexmmaldonado)')
+    print('Written by Alex M. Maldonado (@aalexmmaldonado)\n')
 
     search_string = '.json'
 
@@ -238,21 +238,44 @@ def main():
     save_dir = args.save_dir
     if save_dir[-1] != '/':
         save_dir += '/'
+    
+    # Checks to see if data set already exists.
+    if os.path.isfile(f'{save_dir}{args.name}.npz') and not args.overwrite:
+        print(f'{save_dir}{args.name}.npz already exists and overwrite is False.\n')
+        raise FileExistsError
 
-    # Finds all JSON files and loads them.
+    # Finds all JSON files.
     all_json_paths = get_files(search_dir, search_string, recursive=args.recursive)
+    print(f'Found {len(all_json_paths)} QCJSONs')
+    
+    # Removes files that match any of the words in the remove list.
+    if len(args.remove) > 0:
+        start_number = len(all_json_paths)
+        for trigger in args.remove:
+            all_json_paths = [i for i in all_json_paths if trigger not in i]
+        end_number = len(all_json_paths)
+        print(f'Removed {start_number-end_number} file(s) for a total of {end_number} QCJSONs')
+
+    # Loads all JSON files.
     all_jsons = []
     for path in all_json_paths:
         with open(path, 'r') as f:
             all_jsons.append(json.load(f))
+
     
     # Data checks before proceeding.
+    print('Checking compatibility of all QCJSONs ... ', end="")
     check_jsons(all_jsons)
+    print('passed')
     
+    print(f'Creating the data set ... ', end="")
     gdml_dataset = dataset_from_jsons(all_jsons, args.name)
     gdml_dataset.save(
         gdml_dataset.name, gdml_dataset.dataset, save_dir
     )
+    print('done\n')
+
+    print(f'Your data set is: {save_dir}{args.name}.npz')
 
 if __name__ == "__main__":
     main()
