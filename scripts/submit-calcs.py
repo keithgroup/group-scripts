@@ -79,35 +79,40 @@ def main():
         description='Submit calculations using the slurm command "sbatch"'
     )
     parser.add_argument(
-        'dirs', metavar='dirs', nargs='+', default='',
-        help='directories containing calculations to be submitted'
+        'dir_path', metavar='dir_path', nargs='?',
+        help='path to directory containing calculations to be submitted'
     )
     parser.add_argument(
-        '--submit_string', nargs=1, default='slurm',
+        '--submit_string', nargs='?', default='slurm',
         help='search string for submission scripts, defaults to slurm'
     )
     args = parser.parse_args()
 
-    # Submits calculations in every direction
-    for directory in args.dirs:
-        os.chdir(directory)
-        all_jobs_list = get_files(directory, args.submit_string[0])
-        for job_path in all_jobs_list:
+    # Prepares directory information
+    dir_path = os.path.abspath(args.dir_path)
+    if dir_path[-1] != '/':
+        dir_path += '/'
 
-            slurm_file = job_path.split('/')[-1]
-            job_directory = '/'.join(job_path.split('/')[:-1])
+    
+    os.chdir(dir_path)
+    all_jobs_list = get_files(dir_path, args.submit_string)
+    
+    for job_path in all_jobs_list:
 
-            print('Submitting job in ' + job_path.split('/')[-2] + ' folder')
-            os.chdir(job_directory)
-            bash_command = 'sbatch ' + slurm_file
-            process = subprocess.Popen(
-                bash_command.split(), stdout=subprocess.PIPE
-            )
-            _, error = process.communicate()
+        slurm_file = job_path.split('/')[-1]
+        job_directory = '/'.join(job_path.split('/')[:-1])
 
-            if error is not None:
-                print('Job not submitted successfully. Error:')
-                print(str(error))
+        print('Submitting job in ' + job_path.split('/')[-2] + ' directory')
+        os.chdir(job_directory)
+        bash_command = 'sbatch ' + slurm_file
+        process = subprocess.Popen(
+            bash_command.split(), stdout=subprocess.PIPE
+        )
+        _, error = process.communicate()
+
+        if error is not None:
+            print('Job not submitted successfully. Error:')
+            print(str(error))
 
 
 if __name__ == "__main__":
