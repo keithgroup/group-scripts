@@ -110,7 +110,7 @@ def get_files(path, expression, recursive=True):
         for f in os.listdir(path):
             filename = os.path.basename(f)
             if expression in filename:
-                files.append(os.path.abspath(f))
+                files.append(path + f)
     return files
 
 def parse_stringfile(stringfile_path):
@@ -155,7 +155,7 @@ def parse_stringfile(stringfile_path):
                     data[-1].append([float(i) for i in line_split[1:]])
     return z, comments, data
 
-def string_coords(z, R):
+def string_coords(z, R, decimal_points=9):
     """Puts atomic coordinates into a Python string. Typically used for 
     writing to an input file.
     
@@ -166,6 +166,8 @@ def string_coords(z, R):
     coords : :obj:`numpy.array`
         Contains atomic positions in a (n, 3) numpy array where the x, y, and z 
         Cartesian coordinates in Angstroms are given for the n atoms.
+    decimal_points : :obj:`int`, optional
+        Total number of decimal points to include. Defaults to 9.
     
     Returns
     -------
@@ -176,18 +178,23 @@ def string_coords(z, R):
     atom_index = 0
     while atom_index < len(z):
         atom_element = str(elements[z[atom_index]])
+        format_string = '%.' + str(decimal_points) + 'f'
         coords_string = np.array2string(
             R[atom_index],
             suppress_small=True, separator='   ',
-            formatter={'float_kind':'{:0.9f}'.format}
+            formatter={'float_kind': lambda x: format_string % x}
         )[1:-1] + '\n'
-        atom_coords_string += (atom_element + '   ' \
+        if len(atom_element) == 2:
+            atom_spacing = '   '
+        else:
+            atom_spacing = '    '
+        atom_coords_string += (atom_element + atom_spacing \
                                + coords_string).replace(' -', '-')
         atom_index += 1
     
     return atom_coords_string
 
-def write_xyz(z, R, save_dir, file_name, comments=None):
+def write_xyz(z, R, save_dir, file_name, comments=None, decimal_points=9):
     """Write XYZ file given atomic numbers and Cartesian coordinates.
 
     Parameters
@@ -203,7 +210,10 @@ def write_xyz(z, R, save_dir, file_name, comments=None):
         Path to directory to save XYZ file.
     file_name : :obj:`str`
         Name to save the file.
-    comments : :obj:`list` [:obj:`str`]
+    comments : :obj:`list` [:obj:`str`], optional
+        List of comments for each xyz structure.
+    decimal_points : :obj:`int`, optional
+        Total number of decimal points to include. Defaults to 9.
     """
     if R.ndim == 2:
         R = np.array([R])
@@ -220,7 +230,12 @@ def write_xyz(z, R, save_dir, file_name, comments=None):
                 if comments[i][:-2] != '\n':
                     comments[i] += '\n'
                 comment = comments[i]
-            f.writelines([f'{num_atoms}\n', comment, string_coords(z, R[i])])
+            f.writelines(
+                [
+                    f'{num_atoms}\n', comment,
+                    string_coords(z, R[i], decimal_points=decimal_points)
+                ]
+            )
 
 ### Main ###
 
@@ -232,6 +247,10 @@ def main():
     parser.add_argument(
         'lm_dir', metavar='lm_dir', type=str, nargs='?', default='.',
         help='Path to local minima directory from ABCluster.'
+    )
+    parser.add_argument(
+        '--decimals', metavar='decimals', type=int, nargs='?', default=8,
+        help='Number of decimal points to write in xyz files. Defaults to 8.'
     )
 
     args = parser.parse_args()
@@ -280,6 +299,7 @@ def main():
             if len(set(tuple(i) for i in z)) == 1:
                 z = z[0]
             else:
+                print(abc_file)
                 raise ValueError('Does not support XYZ files with multiple '
                                  'structures not with same atom order.')
             
@@ -288,7 +308,7 @@ def main():
             z = np.array([element_to_z[i] for i in z])
             write_xyz(
                 z, np.array(data), lm_dir, abc_file_name,
-                comments=comments
+                comments=comments, decimal_points=args.decimals
             )
             cleaned_files += 1
     

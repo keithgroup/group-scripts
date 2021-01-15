@@ -14,15 +14,17 @@ leaving the .xyz files) and remove all lone pair entries.
 ## cli help
 
 ```text
-usage: abcluster-cleaner.py [-h] [lm_dir]
+usage: abcluster-cleaner.py [-h] [--decimals [decimals]] [lm_dir]
 
 Partitions structure(s) for energy+gradient calculations.
 
 positional arguments:
-  lm_dir      Path to local minima directory from ABCluster.
+  lm_dir                Path to local minima directory from ABCluster.
 
 optional arguments:
-  -h, --help  show this help message and exit
+  -h, --help            show this help message and exit
+  --decimals [decimals]
+                        Number of decimal points to write in xyz files. Defaults to 8.
 ```
 
 ## Examples
