@@ -65,42 +65,47 @@ def standard_dir(path):
     return path
 
 
-def get_files(path, expression):
+def get_files(path, expression, recursive=True):
     """Returns paths to all files in a given directory that matches a provided
     expression in the file name. Commonly used to find all files of a certain
     type, e.g. output or xyz files.
     
     Parameters
     ----------
-    path : str
+    path : :obj:`str`
         Specifies the directory to search.
-    expression : str
+    expression : :obj:`str`
         Expression to be tested against all file names in 'path'.
+    recursive :obj:`bool`, optional
+        Recursively find all files in all subdirectories.
     
     Returns
     -------
-    list
+    :obj:`list` [:obj:`str`]
         All absolute paths to files matching the provided expression.
     """
     if path[-1] != '/':
         path += '/'
-    
-    all_files = []
-    for (dirpath, _, filenames) in os.walk(path):
-        index = 0
-        while index < len(filenames):
-            if dirpath[-1] != '/':
-                dirpath += '/'
-            filenames[index] = dirpath + filenames[index]
-            index += 1
-
-        all_files.extend(filenames)
-        
-    files = []
-    for file in all_files:
-        if expression in file:
-            files.append(file)
-
+    if recursive:
+        all_files = []
+        for (dirpath, _, filenames) in os.walk(path):
+            index = 0
+            while index < len(filenames):
+                if dirpath[-1] != '/':
+                    dirpath += '/'
+                filenames[index] = dirpath + filenames[index]
+                index += 1
+            all_files.extend(filenames)
+        files = []
+        for f in all_files:
+            if expression in f:
+                files.append(f)
+    else:
+        files = []
+        for f in os.listdir(path):
+            filename = os.path.basename(f)
+            if expression in filename:
+                files.append(path + f)
     return files
 
 

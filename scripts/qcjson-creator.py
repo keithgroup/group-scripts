@@ -33,7 +33,7 @@ Create QCJSONs from output files using the QCSchema
 retrive other information.
 
 Unofficial modifications are made to QCSchema to meet the immediate needs of
-our research. These modications are 
+our research. These modifications are 
 - Official QCSchemas do not support multiple configurations in a single JSON
 file: one file per structure and calculation. This is inherently incompatible
 with geometry optimizations, trajectories, or any other iterative procedure.
@@ -275,7 +275,7 @@ def get_files(path, expression, recursive=True):
         for f in os.listdir(path):
             filename = os.path.basename(f)
             if expression in filename:
-                files.append(os.path.abspath(f))
+                files.append(path + f)
     return files
 
 def convert_forces(
@@ -1538,7 +1538,7 @@ def main():
     args = parser.parse_args()
     print(f'QCJSON creator v{__version__}')
     print('Written by Alex M. Maldonado (@aalexmmaldonado)')
-    print('Parsed data are converted to Hartrees and Angstroms\n')
+    print('Energies and distances are Hartrees and Angstroms\n')
 
     cclib_version_check()
 
@@ -1570,12 +1570,11 @@ def main():
         
         if args.recursive:
             print(f'Looking for output files in {outputs}, recursively')
-            all_outfiles = get_files(outputs, 'out', recursive=True)
         else:
             print(f'Looking for output files in {outputs}')
-            all_outfiles = get_files(outputs, 'out', recursive=False)
+        all_outfiles = get_files(outputs, 'out', recursive=args.recursive)
         
-        print(f'Found {len(all_outfiles)} output files')
+        print(f'Found {len(all_outfiles)} output files\n')
 
         for outfile in all_outfiles:
             file_name = '.'.join(os.path.basename(outfile).split('.')[:-1])
@@ -1594,7 +1593,7 @@ def main():
                         f'\n\u001b[36;1m{file_name}.json already exists.\u001b[0m'
                     )
                     continue
-            print(f'\nMaking QCJSON for {file_name}')
+            print(f'Making QCJSON for {file_name}')
             json_package = identify_package(outfile)
             out_json = json_package(outfile)
             json_dict = out_json.get_json(debug=args.debug)
