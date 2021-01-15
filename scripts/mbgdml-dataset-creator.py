@@ -82,7 +82,7 @@ def get_files(path, expression, recursive=True):
         for f in os.listdir(path):
             filename = os.path.basename(f)
             if expression in filename:
-                files.append(os.path.abspath(f))
+                files.append(path + f)
     return files
 
 def check_jsons(jsons):
@@ -96,12 +96,24 @@ def check_jsons(jsons):
     
     # Data to check.
     driver = 'gradient'
-    atom_nums = jsons[0]['atomic_numbers']
+    if isinstance(jsons[0], list):
+        nested = True
+        atom_nums = jsons[0][0]['atomic_numbers']
+    elif isinstance(jsons[0], dict):
+        nested = False
+        atom_nums = jsons[0]['atomic_numbers'] 
+    else:
+        raise TypeError
 
     # Loop through all jsons and assert checks.
     for i in jsons[1:]:
-        assert i['driver'] == driver
-        assert i['atomic_numbers'] == atom_nums
+        if nested:
+            for j in i:
+                assert j['driver'] == driver
+                assert j['atomic_numbers'] == atom_nums
+        else:
+            assert i['driver'] == driver
+            assert i['atomic_numbers'] == atom_nums
 
 def get_json_data(json_dict):
     """
@@ -223,6 +235,10 @@ def main():
         '--remove', metavar='remove_files', nargs='+', default='',
         help='Ignore paths that contain at least one of these words.'
     )
+    parser.add_argument(
+        '--include', metavar='include_files', nargs='+', default='',
+        help='Only include files that contain all of these words.'
+    )
 
     args = parser.parse_args()
 
@@ -249,12 +265,18 @@ def main():
     print(f'Found {len(all_json_paths)} QCJSONs')
     
     # Removes files that match any of the words in the remove list.
+    start_number = len(all_json_paths)
     if len(args.remove) > 0:
-        start_number = len(all_json_paths)
         for trigger in args.remove:
+            print(f'Removing files including: {trigger}')
             all_json_paths = [i for i in all_json_paths if trigger not in i]
         end_number = len(all_json_paths)
-        print(f'Removed {start_number-end_number} file(s) for a total of {end_number} QCJSONs')
+    if len(args.include) > 0:
+        for trigger in args.include:
+            print(f'Removing files not including: {trigger}')
+            all_json_paths = [i for i in all_json_paths if trigger in i]
+        end_number = len(all_json_paths)
+    print(f'Removed {start_number-end_number} file(s) for a total of {end_number} QCJSONs')
 
     # Loads all JSON files.
     all_jsons = []
