@@ -56,11 +56,13 @@
         "molecular_multiplicity": 1,
         "name": "4h2o.abc0.iter2-orca.opt-mp2.def2tzvp",
         "atomic_numbers": [8, 1, 1, 8, 1, 1, 8, 1, 1, 8, 1, 1],
+        "driver": "optimization",
         "model": {
-
+            "method": "MP2",
+            "basis": "Def2-TZVP"
         },
         "keywords": {
-            "scf_convergence_tolerance": "Normal",
+            "scf_convergence_tolerance": "Tight",
             "scf_grid_level": 2,
             "final_grid_level": 2,
             "frozen_core": true
@@ -95,11 +97,13 @@
         "molecular_multiplicity": 1,
         "name": "4h2o.abc0.iter2-orca.opt-mp2.def2tzvp",
         "atomic_numbers": [8, 1, 1, 8, 1, 1, 8, 1, 1, 8, 1, 1],
+        "driver": "optimization",
         "model": {
-
+            "method": "MP2",
+            "basis": "Def2-TZVP"
         },
         "keywords": {
-            "scf_convergence_tolerance": "Normal",
+            "scf_convergence_tolerance": "Tight",
             "scf_grid_level": 2,
             "final_grid_level": 2,
             "frozen_core": true
@@ -134,11 +138,13 @@
         "molecular_multiplicity": 1,
         "name": "4h2o.abc0.iter2-orca.opt-mp2.def2tzvp",
         "atomic_numbers": [8, 1, 1, 8, 1, 1, 8, 1, 1, 8, 1, 1],
+        "driver": "optimization",
         "model": {
-
+            "method": "MP2",
+            "basis": "Def2-TZVP"
         },
         "keywords": {
-            "scf_convergence_tolerance": "Normal",
+            "scf_convergence_tolerance": "Tight",
             "scf_grid_level": 2,
             "final_grid_level": 2,
             "frozen_core": true
@@ -173,11 +179,13 @@
         "molecular_multiplicity": 1,
         "name": "4h2o.abc0.iter2-orca.opt-mp2.def2tzvp",
         "atomic_numbers": [8, 1, 1, 8, 1, 1, 8, 1, 1, 8, 1, 1],
+        "driver": "optimization",
         "model": {
-
+            "method": "MP2",
+            "basis": "Def2-TZVP"
         },
         "keywords": {
-            "scf_convergence_tolerance": "Normal",
+            "scf_convergence_tolerance": "Tight",
             "scf_grid_level": 2,
             "final_grid_level": 2,
             "frozen_core": true
@@ -212,11 +220,13 @@
         "molecular_multiplicity": 1,
         "name": "4h2o.abc0.iter2-orca.opt-mp2.def2tzvp",
         "atomic_numbers": [8, 1, 1, 8, 1, 1, 8, 1, 1, 8, 1, 1],
+        "driver": "optimization",
         "model": {
-
+            "method": "MP2",
+            "basis": "Def2-TZVP"
         },
         "keywords": {
-            "scf_convergence_tolerance": "Normal",
+            "scf_convergence_tolerance": "Tight",
             "scf_grid_level": 2,
             "final_grid_level": 2,
             "frozen_core": true
@@ -251,11 +261,13 @@
         "molecular_multiplicity": 1,
         "name": "4h2o.abc0.iter2-orca.opt-mp2.def2tzvp",
         "atomic_numbers": [8, 1, 1, 8, 1, 1, 8, 1, 1, 8, 1, 1],
+        "driver": "optimization",
         "model": {
-
+            "method": "MP2",
+            "basis": "Def2-TZVP"
         },
         "keywords": {
-            "scf_convergence_tolerance": "Normal",
+            "scf_convergence_tolerance": "Tight",
             "scf_grid_level": 2,
             "final_grid_level": 2,
             "frozen_core": true
@@ -290,11 +302,13 @@
         "molecular_multiplicity": 1,
         "name": "4h2o.abc0.iter2-orca.opt-mp2.def2tzvp",
         "atomic_numbers": [8, 1, 1, 8, 1, 1, 8, 1, 1, 8, 1, 1],
+        "driver": "optimization",
         "model": {
-
+            "method": "MP2",
+            "basis": "Def2-TZVP"
         },
         "keywords": {
-            "scf_convergence_tolerance": "Normal",
+            "scf_convergence_tolerance": "Tight",
             "scf_grid_level": 2,
             "final_grid_level": 2,
             "frozen_core": true
@@ -329,11 +343,13 @@
         "molecular_multiplicity": 1,
         "name": "4h2o.abc0.iter2-orca.opt-mp2.def2tzvp",
         "atomic_numbers": [8, 1, 1, 8, 1, 1, 8, 1, 1, 8, 1, 1],
+        "driver": "optimization",
         "model": {
-
+            "method": "MP2",
+            "basis": "Def2-TZVP"
         },
         "keywords": {
-            "scf_convergence_tolerance": "Normal",
+            "scf_convergence_tolerance": "Tight",
             "scf_grid_level": 2,
             "final_grid_level": 2,
             "frozen_core": true
@@ -368,11 +384,13 @@
         "molecular_multiplicity": 1,
         "name": "4h2o.abc0.iter2-orca.opt-mp2.def2tzvp",
         "atomic_numbers": [8, 1, 1, 8, 1, 1, 8, 1, 1, 8, 1, 1],
+        "driver": "optimization",
         "model": {
-
+            "method": "MP2",
+            "basis": "Def2-TZVP"
         },
         "keywords": {
-            "scf_convergence_tolerance": "Normal",
+            "scf_convergence_tolerance": "Tight",
             "scf_grid_level": 2,
             "final_grid_level": 2,
             "frozen_core": true
@@ -407,11 +425,13 @@
         "molecular_multiplicity": 1,
         "name": "4h2o.abc0.iter2-orca.opt-mp2.def2tzvp",
         "atomic_numbers": [8, 1, 1, 8, 1, 1, 8, 1, 1, 8, 1, 1],
+        "driver": "optimization",
         "model": {
-
+            "method": "MP2",
+            "basis": "Def2-TZVP"
         },
         "keywords": {
-            "scf_convergence_tolerance": "Normal",
+            "scf_convergence_tolerance": "Tight",
             "scf_grid_level": 2,
             "final_grid_level": 2,
             "frozen_core": true
@@ -446,11 +466,13 @@
         "molecular_multiplicity": 1,
         "name": "4h2o.abc0.iter2-orca.opt-mp2.def2tzvp",
         "atomic_numbers": [8, 1, 1, 8, 1, 1, 8, 1, 1, 8, 1, 1],
+        "driver": "optimization",
         "model": {
-
+            "method": "MP2",
+            "basis": "Def2-TZVP"
         },
         "keywords": {
-            "scf_convergence_tolerance": "Normal",
+            "scf_convergence_tolerance": "Tight",
             "scf_grid_level": 2,
             "final_grid_level": 2,
             "frozen_core": true
@@ -485,11 +507,13 @@
         "molecular_multiplicity": 1,
         "name": "4h2o.abc0.iter2-orca.opt-mp2.def2tzvp",
         "atomic_numbers": [8, 1, 1, 8, 1, 1, 8, 1, 1, 8, 1, 1],
+        "driver": "optimization",
         "model": {
-
+            "method": "MP2",
+            "basis": "Def2-TZVP"
         },
         "keywords": {
-            "scf_convergence_tolerance": "Normal",
+            "scf_convergence_tolerance": "Tight",
             "scf_grid_level": 2,
             "final_grid_level": 2,
             "frozen_core": true
@@ -524,11 +548,13 @@
         "molecular_multiplicity": 1,
         "name": "4h2o.abc0.iter2-orca.opt-mp2.def2tzvp",
         "atomic_numbers": [8, 1, 1, 8, 1, 1, 8, 1, 1, 8, 1, 1],
+        "driver": "optimization",
         "model": {
-
+            "method": "MP2",
+            "basis": "Def2-TZVP"
         },
         "keywords": {
-            "scf_convergence_tolerance": "Normal",
+            "scf_convergence_tolerance": "Tight",
             "scf_grid_level": 2,
             "final_grid_level": 2,
             "frozen_core": true

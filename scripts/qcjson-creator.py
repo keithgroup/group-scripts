@@ -1408,7 +1408,7 @@ class orcaJSON(QCJSON):
         if not hasattr(self, '_json'):
 
             all_jsons = []
-            self.orca_keywords = self.cclib_data.metadata['keywords']
+            self.orca_keywords = self.cclib_data.metadata['keywords'].copy()
             for i in range(0, self.cclib_data.atomcoords.shape[0]):
                 # Optimizations are iterative with only a single set of
                 # keywords; this is different than consecutive jobs (e.g., 
@@ -1416,7 +1416,7 @@ class orcaJSON(QCJSON):
                 # keywords for each optimization iteration.
                 if hasattr(self, 'calc_driver') \
                    and self.calc_driver == 'optimization':
-                    self.orca_keywords = self.cclib_data.metadata['keywords']
+                    self.orca_keywords = self.cclib_data.metadata['keywords'].copy()
                 try:
                     all_jsons.append(super().schema)
                     all_jsons[-1]['provenance'] = self.get_provenance()
