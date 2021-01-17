@@ -204,6 +204,39 @@ def dataset_from_jsons(json_files, dataset_name):
 
     return gdml_dataset
 
+def select_files(all_files, exclude=[], include=[]):
+    """Removes all undesired files from list of paths.
+
+    Parameters
+    ----------
+    all_files : :obj:`list` [:obj:`str`]
+        Collection of file paths.
+    exclude : :obj:`list` [:obj:`str`]
+        Ignore paths that contain at least one of these strings.
+    include : :obj:`list` [:obj:`str`]
+        Only include files that contain all of these strings.
+    
+    Returns
+    -------
+    :obj:`list`
+        Paths that are meet the inclusion and exclusion critera.
+    """
+    # Removes files that match any of the words in the remove list.
+    start_number = len(all_files)
+    if len(exclude) > 0:
+        for trigger in exclude:
+            print(f'Removing files including: {trigger}')
+            all_files = [i for i in all_files if trigger not in i]
+        end_number = len(all_files)
+    if len(include) > 0:
+        for trigger in include:
+            print(f'Removing files not including: {trigger}')
+            all_files = [i for i in all_files if trigger in i]
+        end_number = len(all_files)
+    print(
+        f'Removed {start_number-end_number} file(s) for a remainder of {end_number}'
+    )
+    return all_files
 
 def main():
 
@@ -232,11 +265,11 @@ def main():
         '-o', '--overwrite', action='store_true', help='Overwrite npz data set.'
     )
     parser.add_argument(
-        '--remove', metavar='remove_files', nargs='+', default='',
+        '--exclude', nargs='+', default=[],
         help='Ignore paths that contain at least one of these words.'
     )
     parser.add_argument(
-        '--include', metavar='include_files', nargs='+', default='',
+        '--include', nargs='+', default=[],
         help='Only include files that contain all of these words.'
     )
 
@@ -264,19 +297,10 @@ def main():
     all_json_paths = get_files(search_dir, search_string, recursive=args.recursive)
     print(f'Found {len(all_json_paths)} QCJSONs')
     
-    # Removes files that match any of the words in the remove list.
-    start_number = len(all_json_paths)
-    if len(args.remove) > 0:
-        for trigger in args.remove:
-            print(f'Removing files including: {trigger}')
-            all_json_paths = [i for i in all_json_paths if trigger not in i]
-        end_number = len(all_json_paths)
-    if len(args.include) > 0:
-        for trigger in args.include:
-            print(f'Removing files not including: {trigger}')
-            all_json_paths = [i for i in all_json_paths if trigger in i]
-        end_number = len(all_json_paths)
-    print(f'Removed {start_number-end_number} file(s) for a total of {end_number} QCJSONs')
+    # Removes files that do not meet inclusion and exclusion criteria.
+    all_json_paths = select_files(
+        all_json_paths, exclude=args.exclude, include=args.include
+    )
 
     # Loads all JSON files.
     all_jsons = []
