@@ -237,6 +237,40 @@ def write_xyz(z, R, save_dir, file_name, comments=None, decimal_points=9):
                 ]
             )
 
+def select_files(all_files, exclude=[], include=[]):
+    """Removes all undesired files from list of paths.
+
+    Parameters
+    ----------
+    all_files : :obj:`list` [:obj:`str`]
+        Collection of file paths.
+    exclude : :obj:`list` [:obj:`str`]
+        Ignore paths that contain at least one of these strings.
+    include : :obj:`list` [:obj:`str`]
+        Only include files that contain all of these strings.
+    
+    Returns
+    -------
+    :obj:`list`
+        Paths that are meet the inclusion and exclusion critera.
+    """
+    # Removes files that match any of the words in the remove list.
+    start_number = len(all_files)
+    if len(exclude) > 0:
+        for trigger in exclude:
+            print(f'Selecting files including: {trigger}')
+            all_files = [i for i in all_files if trigger not in i]
+        end_number = len(all_files)
+    if len(include) > 0:
+        for trigger in include:
+            print(f'Selecting files not including: {trigger}')
+            all_files = [i for i in all_files if trigger in i]
+        end_number = len(all_files)
+    print(
+        f'Removed {start_number-end_number} file(s); {end_number} remain'
+    )
+    return all_files
+
 ### Main ###
 
 def main():
@@ -252,6 +286,22 @@ def main():
         '--decimals', metavar='decimals', type=int, nargs='?', default=8,
         help='Number of decimal points to write in xyz files. Defaults to 8.'
     )
+    parser.add_argument(
+        '-r', '--recursive', action='store_true',
+        help='Recursively clean XYZ files.'
+    )
+    parser.add_argument(
+        '--no_remove', action='store_true',
+        help='Do not remove .gjf or .cluster files.'
+    )
+    parser.add_argument(
+        '--exclude', nargs='+', default=[],
+        help='Ignore paths that contain at least one of these words.'
+    )
+    parser.add_argument(
+        '--include', nargs='+', default=[],
+        help='Only include files that contain all of these words.'
+    )
 
     args = parser.parse_args()
 
@@ -266,18 +316,24 @@ def main():
     # Gets all relevant files.
     abc_files = []
     for extension in file_extensions:
-        abc_files.extend(get_files(lm_dir, extension, recursive=False))
+        abc_files.extend(get_files(lm_dir, extension, recursive=args.recursive))
     print(f'Found {len(abc_files)} files')
+
+    # Removes files that do not meet inclusion and exclusion criteria.
+    abc_files = select_files(
+        abc_files, exclude=args.exclude, include=args.include
+    )
     
     # Cleans up directory
     removed_files = 0
     cleaned_files = 0
     print('Working on files ...')
     for abc_file in abc_files:
+        save_dir = os.path.dirname(os.path.abspath(abc_file))
         extension = abc_file.split('.')[-1]
 
         # Remove files ending in '.cluster' or '.gjf'.
-        if extension == 'cluster' or extension == 'gjf':
+        if extension == 'cluster' or extension == 'gjf' and not args.no_remove:
             os.remove(abc_file)
             removed_files += 1
         
@@ -307,7 +363,7 @@ def main():
             abc_file_name = os.path.splitext(os.path.basename(abc_file))[0]
             z = np.array([element_to_z[i] for i in z])
             write_xyz(
-                z, np.array(data), lm_dir, abc_file_name,
+                z, np.array(data), save_dir, abc_file_name,
                 comments=comments, decimal_points=args.decimals
             )
             cleaned_files += 1

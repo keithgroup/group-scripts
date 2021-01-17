@@ -14,7 +14,9 @@ leaving the .xyz files) and remove all lone pair entries.
 ## cli help
 
 ```text
-usage: abcluster-cleaner.py [-h] [--decimals [decimals]] [lm_dir]
+usage: abcluster-cleaner.py [-h] [--decimals [decimals]] [-r] [--no_remove]
+                            [--exclude EXCLUDE [EXCLUDE ...]] [--include INCLUDE [INCLUDE ...]]
+                            [lm_dir]
 
 Partitions structure(s) for energy+gradient calculations.
 
@@ -25,6 +27,12 @@ optional arguments:
   -h, --help            show this help message and exit
   --decimals [decimals]
                         Number of decimal points to write in xyz files. Defaults to 8.
+  -r, --recursive       Recursively clean XYZ files.
+  --no_remove           Do not remove .gjf or .cluster files.
+  --exclude EXCLUDE [EXCLUDE ...]
+                        Ignore paths that contain at least one of these words.
+  --include INCLUDE [INCLUDE ...]
+                        Only include files that contain all of these words.
 ```
 
 ## Examples
