@@ -1552,11 +1552,11 @@ def main():
     parser.add_argument(
         '-o', '--overwrite', action='store_true', help='Overwrite JSON files'
     )
-    parser.add_argument(
-        '--combine', action='store_true',
-        help='Combine all JSON files into a '
-        'single JSON file organized by directory structure.'
-    )
+    # parser.add_argument(
+    #     '--combine', action='store_true',
+    #     help='Combine all JSON files into a '
+    #     'single JSON file organized by directory structure.'
+    # )
     parser.add_argument(
         '-p', '--prettify', action='store_true',
         help='Prettify JSON files with indentation.'
@@ -1649,9 +1649,9 @@ def main():
                     out_json.name, json_dict, abs_path, prettify=args.prettify
                 )
             
-        if args.combine:
-            # TODO
-            pass
+        # if args.combine:
+        # 
+        #     pass
             
     else:
         raise ValueError(f'{outputs} is an unsupported type.')
