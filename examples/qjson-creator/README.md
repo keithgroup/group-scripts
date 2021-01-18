@@ -3,32 +3,35 @@
 This Python script creates Quantum Chemistry JSON, QCJSON, files for computational chemistry output files using the [QCSchema](https://github.com/MolSSI/QCSchema).
 
 Reproducibility is a cornerstone of science, and computational chemistry is not different.
-In decreasing level of transparency and reproducibility in computational chemistry, researchers should be able to provide source codes, raw output files, input files, or some sort of machine readable database (XML and JSON). 
+In decreasing level of transparency and reproducibility in computational chemistry, researchers should be able to provide source codes, raw output files, input files, or some sort of machine readable database (XML and JSON).
 Since commercial software is commonly used, this incentivizes providing output files and a machine readable database.
 
 This is an easy-to-use script for creating JSON databases of computational chemistry output files.
 
 ## Requirements
 
-* cclib
-* numpy
+* cclib (>=1.7)
 
 ## Use
 
-
 ### Options
 
-* `--overwrite`: Will overwrite JSON file if it already exists.
-* `--save_dir`: Path to directory to store JSON files; for example, "`--save_dir json_dir`".
-* `--name`: What to name the cumulative JSON file; for example, '`--name example-data`'.
+* `-o`, `--overwrite`: Overwrite JSON file if it already exists.
+* `-r`, `--recursive`: Recursively find output files to make QCJSONs.
+* `-p`, `--prettify`: Indent JSON properties.
+* `--save_dir`: Path to directory to store JSON files; for example, `--save_dir json_dir`.
+  Defaults to current directory.
+* `--name`: What to name the cumulative JSON file; for example, `--name example-data`.
 Default is 'data'.
-* `--remove`: Does not include file paths that have these strings in their path; for example, '`--remove bad bp86`' will not include any files with 'bad' or 'bp86' in the pathway.
+* `--exclude`: Does not include file paths that have these strings in their path; for example, `--exclude bad bp86` will not include any files with 'bad' or 'bp86' in the path.
+* `--include`: Will only include files that have all of these strings in their path; for example, `--include b3lyp` will only include files with `b3lyp` in the path.
+* `-d`, `--debug`: Will raise errors instead of skipping failed JSONs.
 
 ### Example
 
 The following command produces a `data.json` file from output files in the  `example-calculations` directory.
 
-```
+```text
 $ qcjson-creator.py . -p
 QCJSON creator v0.1.1
 Written by Alex M. Maldonado (@aalexmmaldonado)
@@ -51,13 +54,10 @@ Making QCJSON for neb-bare.0-orca.sp-bp86.def2svp
 
 Custom modifications are made to [QCSchema](https://github.com/MolSSI/QCSchema) to meet the immediate needs of our research.
 
-- [QCSchema](https://github.com/MolSSI/QCSchema) do not support multiple configurations in a single JSON
-file: one file per structure and calculation. This is inherently incompatible
-with geometry optimizations, trajectories, or any other iterative procedure.
-At of the time of writing (2021-01-03), there has been no consensus of how to manage these files.
-Our immediate solution is to list each [QCSchema](https://github.com/MolSSI/QCSchema) inside a list (i.e., [ { }, { }, { }, ... ] ). Furthermore, only iterations that have
-the same topology are supported (no checks are provided).
-- Other information with keywords not defined in the [QCSchema](https://github.com/MolSSI/QCSchema).
+* [QCSchema](https://github.com/MolSSI/QCSchema) do not support multiple configurations in a single JSON file: one file per structure and calculation. This is inherently incompatible with geometry optimizations, trajectories, or any other iterative procedure.
+  At of the time of writing (2021-01-03), there has been no consensus of how to manage these files.
+  Our immediate solution is to list each [QCSchema](https://github.com/MolSSI/QCSchema) inside a list (i.e., [ { }, { }, { }, ... ] ). Furthermore, only iterations that have the same topology are supported (no checks are provided).
+* Other information with keywords not defined in the [QCSchema](https://github.com/MolSSI/QCSchema).
 
 ### Keys
 
@@ -111,11 +111,11 @@ All custom keys are marked with a *, and the Python type is specified.
 
 In this directory, there are the following example ORCA 4.2.0 calculation output files with corresponding QCJSONs:
 
-- `4h2o.abc0.iter2-orca.opt-mp2.def2tzvp.out`: An optimization using MP2/def2-TZVP with the default frozen core approximation.
-- `neb-bare.0-orca.sp-bp86.def2svp.out`: A single-point energy calculation using BP86-D3BJ/def2-TZVP.
-- `neb-bare.0-orca.sp-bp86.def2tzvp.smd.out`: A single-point energy calculation using BP86-D3BJ/def2-TZVP with a water implicit solvent model (SMD).
-- `neb-bare.0-orca.sp-wb97x.def2tzvp.out`: A single-point energy calculation using $\omega$B97X-D3BJ/def2-TZVP.
-- `5h2o.abc0.iter1.mp2.md.300k.iter1.mol0,1,2,3,4-orca.engrad-mp2.def2tzvp.out`: An ORCA job running multiple energy+gradient calculations on different configurations of the same system.
+* `4h2o.abc0.iter2-orca.opt-mp2.def2tzvp.out`: An optimization using MP2/def2-TZVP with the default frozen core approximation.
+* `neb-bare.0-orca.sp-bp86.def2svp.out`: A single-point energy calculation using BP86-D3BJ/def2-TZVP.
+* `neb-bare.0-orca.sp-bp86.def2tzvp.smd.out`: A single-point energy calculation using BP86-D3BJ/def2-TZVP with a water implicit solvent model (SMD).
+* `neb-bare.0-orca.sp-wb97x.def2tzvp.out`: A single-point energy calculation using $\omega$B97X-D3BJ/def2-TZVP.
+* `5h2o.abc0.iter1.mp2.md.300k.iter1.mol0,1,2,3,4-orca.engrad-mp2.def2tzvp.out`: An ORCA job running multiple energy+gradient calculations on different configurations of the same system.
 
 ## Changelog
 
@@ -126,28 +126,35 @@ and this project adheres to
 ## [Unreleased]
 
 ## [0.1.1] - 2021-01-06
+
 ### Fixed
-- cclib version requirement.
-- Recursive option would save in current directory and not in the same directory
+
+* cclib version requirement.
+* Recursive option would save in current directory and not in the same directory
   of the output file.
-- get_json would incorrectly catch KeyboardInterrupt exception.
+* get_json would incorrectly catch KeyboardInterrupt exception.
 
 ## [0.1.0] - 2021-01-05
+
 ### Added
-- Custom parser for ORCA information such as integration grid, scf energy
+
+* Custom parser for ORCA information such as integration grid, scf energy
   contributions (e.g., one-electron and two-electron energies), MP2 correlation
   energies, RI approximations.
-- Debug option to raise errors instead of skipping over files.
-- Alpha and beta electron HOMO and LUMO information.
-- 'return_energy' property regardless of driver.
+* Debug option to raise errors instead of skipping over files.
+* Alpha and beta electron HOMO and LUMO information.
+* 'return_energy' property regardless of driver.
 
 ### Changed
-- Nest iterations into a list instead of having int labels.
-- Standardized getting SCF, MP, and CC energies from cclib.
-- Requires outfile path to initialize json classes.
-- Write each JSON file directly after parsing instead of all at the end. That
+
+* Nest iterations into a list instead of having int labels.
+* Standardized getting SCF, MP, and CC energies from cclib.
+* Requires outfile path to initialize json classes.
+* Write each JSON file directly after parsing instead of all at the end. That
   way if the script crashes the proceeding JSON files are already written.
 
 ## [0.0.1] - 2021-01-03
+
 ### Added
-- Initial release!
+
+* Initial release!
