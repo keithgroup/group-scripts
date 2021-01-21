@@ -392,9 +392,10 @@ def select_files(all_files, exclude=[], include=[]):
             print(f'Selecting files not including: {trigger}')
             all_files = [i for i in all_files if trigger in i]
         end_number = len(all_files)
-    print(
-        f'Removed {start_number-end_number} file(s); {end_number} remain'
-    )
+    if 'end_number' in locals():
+        print(
+            f'Removed {start_number-end_number} file(s); {end_number} remain'
+        )
     return all_files
 
 
