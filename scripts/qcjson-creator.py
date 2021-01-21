@@ -55,15 +55,24 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- Instead of parsing output file multiple times for specific information, we
+  parse the file once for all information (dramatic performance boost).
+
 ## [0.1.1] - 2021-01-06
+
 ### Fixed
+
 - cclib version requirement.
 - Recursive option would save in current directory and not in the same directory
   of the output file.
 - get_json would incorrectly catch KeyboardInterrupt exception.
 
 ## [0.1.0] - 2021-01-05
+
 ### Added
+
 - Custom parser for ORCA information such as integration grid, scf energy
   contributions (e.g., one-electron and two-electron energies), MP2 correlation
   energies, RI approximations.
@@ -72,6 +81,7 @@ and this project adheres to
 - 'return_energy' property regardless of driver.
 
 ### Changed
+
 - Nest iterations into a list instead of having int labels.
 - Standardized getting SCF, MP, and CC energies from cclib.
 - Requires outfile path to initialize json classes.
@@ -79,7 +89,9 @@ and this project adheres to
   way if the script crashes the proceeding JSON files are already written.
 
 ## [0.0.1] - 2021-01-03
+
 ### Added
+
 - Support for output files containing multiple jobs or iterations
   (optimizations).
 - ORCA Schema creator for single-point energies and gradients.
@@ -416,11 +428,32 @@ class outfileParser:
     ----------
     outfile_path : :obj:`str`
         Path to output file.
+    
+    Attributes
+    ----------
+    outfile_path : :obj:`str`
+        Path to output file.
+    file_name : :obj:`str`
+        The name of the file without extension.
+    data : :obj:`dict`
+        Extracted data from the output file (after being parsed).
     """
 
     def __init__(self, outfile_path):
         self.outfile_path = outfile_path
         self.file_name = '.'.join(outfile_path.split('/')[-1].split('.')[:-1])
+        self.data = {
+            'keywords': {},
+            'properties': {}
+        }
+    
+    def parse(self):
+        """Parses trajectory file and extracts information.
+        """
+        with open(self.outfile_path, mode='r') as trajfile:
+            for trajline in trajfile:
+                self.extract(trajfile, trajline)
+        self._after_parse()
 
 
 
@@ -431,7 +464,54 @@ class orcaParser(outfileParser):
     def __init__(self, outfile_path):
         super().__init__(outfile_path)
     
-    def get_grid_info(self):
+    def extract(self, outfile, line):
+        """Extracts all possible information from trajectory file.
+
+        Parameters
+        ----------
+        outfile : :obj:`io.TextIOWrapper`
+            Buffered text stream of the output file.
+        line : :obj:`str`
+            Parsed line from ``outfile``.
+        """
+
+        # -------------------
+        # DFT GRID GENERATION
+        # -------------------
+        if 'DFT GRID GENERATION' == line.strip():
+            self._extract_grid_info(outfile, line)
+        
+        # Setting up the final grid:
+        if 'Setting up the final grid:' == line.strip():
+            self._extract_grid_info(outfile, line)
+        
+        # ------------
+        # SCF SETTINGS
+        # ------------
+        if 'SCF SETTINGS' == line.strip():
+            self._extract_scf_info(outfile, line)
+
+        # ----------------
+        # TOTAL SCF ENERGY
+        # ----------------
+        if 'TOTAL SCF ENERGY' == line.strip():
+            self._extract_scf_energies(outfile, line)
+        
+        # ----------------------------------------------------------
+        #                         ORCA  MP2 
+        # ----------------------------------------------------------
+        if 'ORCA  MP2' == line.strip():
+            self._extract_mp_energies(outfile, line)
+            
+
+    def _after_parse(self):
+        """Checks to perform after parsing output file.
+        """
+
+        if 'final_grid_level' not in self.data['keywords'].keys():
+            self.data['keywords']['final_grid_level'] = self.data['keywords']['scf_grid_level']
+
+    def _extract_grid_info(self, outfile, line):
         """DFT integration grid information.
 
         All DFT calculations are performed with numerical integration, which
@@ -445,17 +525,12 @@ class orcaParser(outfileParser):
         parse the grid information from the output file instead of depending
         on the keywords.
 
-        Returns
-        -------
-        :obj:`dict`
-            Contains grid information using the following keys:
-
-            ``'scf_grid_level'``
-                :obj:`int` specifying ORCA default grid level (1 to 7) during
-                the SCF cycle.
-            ``'final_grid_level'``
-                :obj:`int` specifying ORCA default grid level for the final
-                evaluation.
+        Parameters
+        ----------
+        outfile : :obj:`io.TextIOWrapper`
+            Buffered text stream of the output file.
+        line : :obj:`str`
+            Parsed line from ``outfile``.
         
         Notes
         -----
@@ -474,39 +549,23 @@ class orcaParser(outfileParser):
         |  7     |  Lebedev-770  |  5.67    |
         +--------+---------------+----------+
         """
-        grid_info = {}
         lebedev_to_level = {
             '50': 1, '110': 2, '194': 3, '302': 4, '434': 5, '590': 6, '770': 7
         }
-
-        with open(self.outfile_path, mode='r') as outfile:
-            for line in outfile:
-                # -------------------
-                # DFT GRID GENERATION
-                # -------------------
-                # 
-                # General Integration Accuracy     IntAcc      ...  4.340
-                # Radial Grid Type                 RadialGrid  ... Gauss-Chebyshev
-                # Angular Grid (max. acc.)         AngularGrid ... Lebedev-110
-                if 'DFT GRID GENERATION' == line.strip():
-                    while 'Angular Grid (max. acc.)' not in line:
-                        line = next(outfile)
-                    lebedev_num = line.strip().split('-')[-1]
-                    grid_info['scf_grid_level'] = lebedev_to_level[lebedev_num]
-                    continue
-                
-                if 'Setting up the final grid:' == line.strip():
-                    while 'Angular Grid (max. acc.)' not in line:
-                        line = next(outfile)
-                    lebedev_num = line.strip().split('-')[-1]
-                    grid_info['final_grid_level'] = lebedev_to_level[lebedev_num]
-                    continue
         
-        if 'final_grid_level' not in grid_info.keys():
-            grid_info['final_grid_level'] = grid_info['scf_grid_level']
-        return grid_info
+        # SCF Cycle Grid
+        if 'DFT GRID GENERATION' == line.strip():
+            while 'Angular Grid (max. acc.)' not in line:
+                line = next(outfile)
+            lebedev_num = line.strip().split('-')[-1]
+            self.data['keywords']['scf_grid_level'] = lebedev_to_level[lebedev_num]
+        elif 'Setting up the final grid:' == line.strip():
+            while 'Angular Grid (max. acc.)' not in line:
+                line = next(outfile)
+            lebedev_num = line.strip().split('-')[-1]
+            self.data['keywords']['final_grid_level'] = lebedev_to_level[lebedev_num]
     
-    def _parse_other_scf_energies(self, outfile, scf_info):
+    def _extract_scf_energies(self, outfile, line):
         """The nulear repulsion, one- and two-electron energy, and
         exchange-correlation energy after a SCF cycle.
 
@@ -519,67 +578,47 @@ class orcaParser(outfileParser):
 
         Parameters
         ----------
-        outfile
-            An opened output file.
-        scf_info : :obj:`dict`
-            The scf_info dict that contains all QCSchema-supported SCF energies.
-        
-        Returns
-        -------
-        :obj:`dict`
-            Available SCF energy components that could include the following
-            keys.
-
-            ``'scf_one_electron_energy'``
-                The one-electron (core Hamiltonian) energy contribution to the
-                total SCF energy.
-            ``'scf_two_electron_energy'``
-                The two-electron energy contribution to the total SCF energy.
-            ``'nuclear_repulsion_energy'``
-                The nuclear repulsion energy contribution to the total SCF
-                energy.
-            ``'scf_xc_energy'``
-                The functional energy contribution to the total SCF energy.
+        outfile : :obj:`io.TextIOWrapper`
+            Buffered text stream of the output file.
+        line : :obj:`str`
+            Parsed line from ``outfile``.
         """
-        for line in outfile:
+        while 'SCF CONVERGENCE' != line.strip():
             # Nuclear Repulsion  :  135.87324654 Eh    3697.29901 eV
-            if 'Nuclear Repulsion' in line:
-                if 'nuclear_repulsion_energy' not in scf_info.keys():
-                    scf_info['nuclear_repulsion_energy'] = []
-                scf_info['nuclear_repulsion_energy'].append(
+            if 'Nuclear Repulsion  :' in line:
+                if 'nuclear_repulsion_energy' not in self.data['properties'].keys():
+                    self.data['properties']['nuclear_repulsion_energy'] = []
+                self.data['properties']['nuclear_repulsion_energy'].append(
                     float(line.split()[3])
                 )
 
             # One Electron Energy: -674.26034691 Eh  -18347.55681 eV
-            if 'One Electron Energy' in line:
-                if 'scf_one_electron_energy' not in scf_info.keys():
-                    scf_info['scf_one_electron_energy'] = []
-                scf_info['scf_one_electron_energy'].append(
+            if 'One Electron Energy:' in line:
+                if 'scf_one_electron_energy' not in self.data['properties'].keys():
+                    self.data['properties']['scf_one_electron_energy'] = []
+                self.data['properties']['scf_one_electron_energy'].append(
                     float(line.split()[3])
                 )
 
             # Two Electron Energy:  245.90403408 Eh    6691.38895 eV
-            if 'Two Electron Energy' in line:
-                if 'scf_two_electron_energy' not in scf_info.keys():
-                    scf_info['scf_two_electron_energy'] = []
-                scf_info['scf_two_electron_energy'].append(
+            if 'Two Electron Energy:' in line:
+                if 'scf_two_electron_energy' not in self.data['properties'].keys():
+                    self.data['properties']['scf_two_electron_energy'] = []
+                self.data['properties']['scf_two_electron_energy'].append(
                     float(line.split()[3])
                 )
 
-            # E(XC)   :    -26.170406641397 Eh
-            if 'E(XC)' in line:
-                if 'scf_xc_energy' not in scf_info.keys():
-                    scf_info['scf_xc_energy'] = []
-                scf_info['scf_xc_energy'].append(
+            # E(XC)              :      -26.170411238000 Eh 
+            if 'E(XC) ' in line:
+                if 'scf_xc_energy' not in self.data['properties'].keys():
+                    self.data['properties']['scf_xc_energy'] = []
+                self.data['properties']['scf_xc_energy'].append(
                     float(line.split()[2])
                 )
 
-            if 'SCF CONVERGENCE' == line.strip():
-                break
-        
-        return scf_info
+            line = next(outfile)
     
-    def _parse_other_mp_energies(self, outfile, mp_info):
+    def _extract_mp_energies(self, outfile, line):
         """Moller-Plesset calculation properties.
 
         This is called directly after the ``'ORCA  MP2 '`` trigger, and 
@@ -591,138 +630,27 @@ class orcaParser(outfileParser):
 
         Parameters
         ----------
-        outfile
-            An opened output file.
-        mp_info : :obj:`dict`
-            The mp_info dict that contains all QCSchema-supported mp energies.
-        
-        Returns
-        -------
-        :obj:`dict`
-            Available MP energy components that could include the following
-            keys.
-
-            ``'mp2_correlation_energy'``
-                The MP2 correlation energy.
+        outfile : :obj:`io.TextIOWrapper`
+            Buffered text stream of the output file.
+        line : :obj:`str`
+            Parsed line from ``outfile``.
         """
-        for line in outfile:
+        while '*     ORCA property calculations      *' != line.strip():
             #  MP2 CORRELATION ENERGY   :     -3.132364939 Eh
             if 'MP2 CORRELATION ENERGY' in line:
-                if 'mp2_correlation_energy' not in mp_info.keys():
-                    mp_info['mp2_correlation_energy'] = []
+                if 'mp2_correlation_energy' not in self.data['properties'].keys():
+                    self.data['properties']['mp2_correlation_energy'] = []
                 if 'RI-MP2' in line:
                     index = 3
                 else:
                     index = 4
-                mp_info['mp2_correlation_energy'].append(
+                self.data['properties']['mp2_correlation_energy'].append(
                     float(line.split()[index])
                 )
+            
+            line = next(outfile)
 
-            #      ***************************************
-            #      *     ORCA property calculations      *
-            #      ***************************************
-            if '*     ORCA property calculations      *' == line.strip():
-                break
-        
-        return mp_info
-    
-    def get_other_scf_energies(self, iteration=-1):
-        """Other scf energy components.
-
-        This will be placed under the ``'properties'`` JSON property.
-
-        Parameters
-        ----------
-        iteration: :obj:`int`, optional
-            Defaults to the last iteration.
-
-        Returns
-        -------
-        :obj:`dict`
-            Available SCF energy components that could include the following
-            keys.
-
-            ``'scf_one_electron_energy'``
-                The one-electron (core Hamiltonian) energy contribution to the
-                total SCF energy.
-            ``'scf_two_electron_energy'``
-                The two-electron energy contribution to the total SCF energy.
-            ``'nuclear_repulsion_energy'``
-                The nuclear repulsion energy contribution to the total SCF
-                energy.
-            ``'scf_xc_energy'``
-                The functional energy contribution to the total SCF energy.
-        """
-        
-        if not hasattr(self, '_other_scf_energies'):
-            other_scf_energies = {}
-            with open(self.outfile_path, mode='r') as outfile:
-                for line in outfile:
-
-                    # ----------------
-                    # TOTAL SCF ENERGY
-                    # ----------------
-                    if 'TOTAL SCF ENERGY' == line.strip():
-                        # Iterative jobs will have multiple SCF calculations.
-                        # Thus, we separated the parsing trigger and the actual
-                        # parsing of the SCF energies. That way, the entire
-                        # file is parsed instead of stopping at the first one.
-                        other_scf_energies = self._parse_other_scf_energies(
-                            outfile, other_scf_energies
-                        )
-
-            self._other_scf_energies = other_scf_energies
-        
-        other_scf_energies_iter = {}
-        for k, v in self._other_scf_energies.items():
-            other_scf_energies_iter[k] = v[iteration]
-        return other_scf_energies_iter
-    
-    def get_other_mp_energies(self, iteration=-1):
-        """Other MP energy components.
-
-        This will be placed under the ``'properties'`` JSON property.
-
-        Parameters
-        ----------
-        iteration: :obj:`int`, optional
-            Defaults to the last iteration.
-
-        Returns
-        -------
-        :obj:`dict`
-            Available MP energy components that could include the following
-            keys.
-
-            ``'mp2_correlation_energy'``
-                The MP2 correlation energy.
-        """
-        
-        if not hasattr(self, '_other_mp_energies'):
-            other_mp_energies = {}
-            with open(self.outfile_path, mode='r') as outfile:
-                for line in outfile:
-
-                    # ----------------------------------------------------------
-                    #                         ORCA  MP2 
-                    # ----------------------------------------------------------
-                    if 'ORCA  MP2' == line.strip():
-                        # Iterative jobs will have multiple MP2 calculations.
-                        # Thus, we separated the parsing trigger and the actual
-                        # parsing of the MP2 energies. That way, the entire
-                        # file is parsed instead of stopping at the first one.
-                        other_mp_energies = self._parse_other_mp_energies(
-                            outfile, other_mp_energies
-                        )
-
-            self._other_mp_energies = other_mp_energies
-        
-        other_mp_energies_iter = {}
-        for k, v in self._other_mp_energies.items():
-            other_mp_energies_iter[k] = v[iteration]
-        return other_mp_energies_iter
-
-    def get_other_scf_info(self):
+    def _extract_scf_info(self, outfile, line):
         """Other scf information.
 
         This will be placed under the ``'keyword'`` JSON property.
@@ -739,38 +667,19 @@ class orcaParser(outfileParser):
                 The chain-of-spheres integration approximation to the exchange
                 term (COSX).
         """
-        
-        if not hasattr(self, '_other_scf_info'):
-            scf_info = {}
-            with open(self.outfile_path, mode='r') as outfile:
-                for line in outfile:
+        while 'Total time needed     ' not in line.strip():
+            #  RI-approximation to the Coulomb term is turned on
+            if 'RI-approximation to the Coulomb term is turned on' in line:
+                self.data['keywords']['rij_approximation'] = True
 
-                    # ------------
-                    # SCF SETTINGS
-                    # ------------
-
-                    #  RI-approximation to the Coulomb term is turned on
-                    if 'RI-approximation to the Coulomb term is turned on' in line:
-                        scf_info['rij_approximation'] = True
-
-                    #    RIJ-COSX (HFX calculated with COS-X)).... on
-                    if 'RIJ-COSX (HFX calculated with COS-X)' in line:
-                        scf_info['cosx_approximation'] = True
-                    
-                    if 'RI-JK (J+K treated both via RI)' in line:
-                        scf_info['rik_approximation'] = True
-
-                    # -------------------
-                    # DFT GRID GENERATION
-                    # -------------------
-                    if 'DFT GRID GENERATION' == line.strip():
-                        break
-
-            self._scf_info = scf_info
-        
-        return self._scf_info
-
-
+            #    RIJ-COSX (HFX calculated with COS-X)).... on
+            if 'RIJ-COSX (HFX calculated with COS-X)' in line:
+                self.data['keywords']['cosx_approximation'] = True
+            
+            if 'RI-JK (J+K treated both via RI)' in line:
+                self.data['keywords']['rik_approximation'] = True
+            
+            line = next(outfile)
 
 
 
@@ -799,7 +708,7 @@ class QCJSON:
     """
 
     def __init__(self):
-        self.name = 'qcschema'
+        self.name = 'qcjson'
 
     def write(self, name, json_dict, save_dir, prettify=True):
         """Writes JSON.
@@ -830,7 +739,7 @@ class QCJSON:
             f.write(json_string)
     
     def parse_output(self):
-        """Parse output file using cclib.
+        """Parse output file using cclib and custom parser.
 
         Parameters
         ----------
@@ -840,11 +749,18 @@ class QCJSON:
         filename_with_extension = os.path.basename(self.outfile_path)
         self.path = os.path.abspath(self.outfile_path)
         self.name = '.'.join(filename_with_extension.split('.')[:-1])
+
+        # cclib parsed information.
         self.cclib_data = cclib.io.ccread(self.outfile_path)
         if self.cclib_data.atomcoords.shape[0] > 1:
             self.multiple = True
         elif self.cclib_data.atomcoords.shape[0] == 1:
             self.multiple = False
+        
+        # Custom parsed information.
+        self.parser = orcaParser(self.path)
+        self.parser.parse()
+        self.parsed_data = self.parser.data
     
     @property
     def schema(self):
@@ -973,7 +889,6 @@ class orcaJSON(QCJSON):
     def __init__(self, outfile_path):
         super().__init__()
         self.outfile_path = outfile_path
-        self.parser = orcaParser(outfile_path)
         self.parse_output()
     
     def get_topology(self, iteration=-1):
@@ -1202,14 +1117,10 @@ class orcaJSON(QCJSON):
         if 'scf_convergence_tolerance' not in keywords.keys():
             keywords['scf_convergence_tolerance'] = 'Normal'
         
-        # Manually parses SCF information like RI approximations
-        keywords = {
-            **keywords, **self.parser.get_other_scf_info()
-        }
-
+        # Manually parses SCF information like RI approximations.
         # Manually parses SCF and final grid.
         keywords = {
-            **keywords, **self.parser.get_grid_info()
+            **keywords, **self.parsed_data['keywords']
         }
         
         # Specifies if FrozenCore is used in MP or CC jobs.
@@ -1261,25 +1172,24 @@ class orcaJSON(QCJSON):
         """
         properties = {}
         if self.method_type == 'scf':
-            properties['scf_total_energy'] = self._get_scf_energy(
-                iteration=iteration
-            )
+            properties['scf_total_energy'] = self._get_scf_energy(iteration=iteration)
             properties['return_energy'] = properties['scf_total_energy']
             properties['scf_dispersion_correction_energy'] = cclib.parser.utils.convertor(
                 self.cclib_data.dispersionenergies[iteration], 'eV', 'hartree'
             )
             properties['scf_iterations'] = self.cclib_data.scfvalues[0].shape[0]
         elif self.method_type == 'moller-plesset':
-            properties['scf_total_energy'] = self._get_scf_energy(
-                iteration=iteration
-            )
-            properties['mp2_total_energy'] = self._get_mp_energy(
-                iteration=iteration
-            )
+            properties['scf_total_energy'] = self._get_scf_energy(iteration=iteration)
+            properties['mp2_total_energy'] = self._get_mp_energy(iteration=iteration)
             properties['return_energy'] = properties['mp2_total_energy']
-            properties = {
-                **properties, **self.parser.get_other_mp_energies(iteration=iteration)
-            }
+
+            # MP2 correlation energies are included in every iteration of jobs.
+            # Thus, even with optimizations, we will include other mp2 energies.
+            for info in self.parsed_data['properties'].keys():
+                if 'mp2_' in info:
+                    data = self.parsed_data['properties'][info][iteration]
+                    data_merge = {info: data}
+                    properties = {**properties, **data_merge}
         elif self.method_type == 'coupled cluster':
             # TODO
             pass
@@ -1288,14 +1198,14 @@ class orcaJSON(QCJSON):
         properties['calcinfo_nbasis'] = self.cclib_data.nbasis
         properties['calcinfo_nmo'] = self.cclib_data.nmo
 
-        # Gets other SCF energy components like nuclear repulsion and
-        # one-electorn energy.
-        # ORCA optimizations do not always include the components, so it is not
-        # included.
+        # Adds manually parsed data.
+        # ORCA optimizations does not always include all the components for
+        # each iteration. So, we don't include the extra information here.
         if self.calc_driver != 'optimization':
-            properties = {
-                **properties, **self.parser.get_other_scf_energies(iteration=iteration)
-            }
+            for info in self.parsed_data['properties'].keys():
+                data = self.parsed_data['properties'][info][iteration]
+                data_merge = {info: data}
+                properties = {**properties, **data_merge}
         
         # Alpha and beta electron properties
         homo_idx_alpha = int(self.cclib_data.homos[0])
