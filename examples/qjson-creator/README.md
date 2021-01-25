@@ -135,9 +135,11 @@ All custom keys are marked with a *, and the Python type is specified.
     * ``"scf_one_electron_energy"``: float, the one-electron (core Hamiltonian) energy contribution to the total SCF energy.
     * ``"scf_two_electron_energy"``: float, the two-electron energy contribution to the total SCF energy.
     * ``"scf_xc_energy"``: float, the functional energy contribution to the total SCF energy.
+    * ``"scf_dipole_moment"``: list [float, float, ...], the x, y, and z dipole components.
     * ``"nuclear_repulsion_energy"``: float, the nuclear repulsion energy contribution to the total SCF energy.
     * ``"mp2_total_energy"``: float, the total MP2 energy (MP2 correlation energy + HF energy).
     * ``"mp2_correlation_energy"``: float, the MP2 correlation energy.
+    * ``"mp2_dipole_moment"``: list [float, float, ...], the x, y, and z dipole components.
     * ``"alpha_homo_energy"``*: float, highest occupied molecular orbital energy of the alpha electron.
     * ``"alpha_homo_lumo_gap_energy"``*: float, energy difference between lowest unoccupied and highest occupied molecule orbital of the alpha electron.
     * ``"beta_homo_energy"``*: float, highest occupied molecular orbital energy of the beta electron.
@@ -155,24 +157,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+### [Unreleased]
 
-### Changed
+#### Added
+
+* Dipole moment property.
+
+#### Changed
 
 * Improved exclusion and inclusions system for filtering files.
 
-## [0.1.1] - 2021-01-06
+### [0.1.1] - 2021-01-06
 
-### Fixed
+#### Fixed
 
 * cclib version requirement.
 * Recursive option would save in current directory and not in the same directory
   of the output file.
 * get_json would incorrectly catch KeyboardInterrupt exception.
 
-## [0.1.0] - 2021-01-05
+### [0.1.0] - 2021-01-05
 
-### Added
+#### Added
 
 * Custom parser for ORCA information such as integration grid, scf energy
   contributions (e.g., one-electron and two-electron energies), MP2 correlation
@@ -181,7 +187,7 @@ and this project adheres to
 * Alpha and beta electron HOMO and LUMO information.
 * 'return_energy' property regardless of driver.
 
-### Changed
+#### Changed
 
 * Nest iterations into a list instead of having int labels.
 * Standardized getting SCF, MP, and CC energies from cclib.
@@ -189,8 +195,8 @@ and this project adheres to
 * Write each JSON file directly after parsing instead of all at the end. That
   way if the script crashes the proceeding JSON files are already written.
 
-## [0.0.1] - 2021-01-03
+### [0.0.1] - 2021-01-03
 
-### Added
+#### Added
 
 * Initial release!

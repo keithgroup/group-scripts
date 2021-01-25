@@ -32,6 +32,7 @@
         "return_energy": -292.071721944,
         "scf_dispersion_correction_energy": -0.006705274,
         "scf_iterations": 18,
+        "scf_dipole_moment": [ 1.6891, 0.46825, -3.18522 ],
         "calcinfo_nbasis": 100,
         "calcinfo_nmo": 100,
         "nuclear_repulsion_energy": 135.87324654,

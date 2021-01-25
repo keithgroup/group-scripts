@@ -53,48 +53,49 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+### [Unreleased]
 
-### Changed
+#### Added
 
-- Instead of parsing output file multiple times for specific information, we
-  parse the file once for all information (dramatic performance boost).
+* Dipole moment property.
 
-## [0.1.1] - 2021-01-06
+#### Changed
 
-### Fixed
+* Improved exclusion and inclusions system for filtering files.
 
-- cclib version requirement.
-- Recursive option would save in current directory and not in the same directory
+### [0.1.1] - 2021-01-06
+
+#### Fixed
+
+* cclib version requirement.
+* Recursive option would save in current directory and not in the same directory
   of the output file.
-- get_json would incorrectly catch KeyboardInterrupt exception.
+* get_json would incorrectly catch KeyboardInterrupt exception.
 
-## [0.1.0] - 2021-01-05
+### [0.1.0] - 2021-01-05
 
-### Added
+#### Added
 
-- Custom parser for ORCA information such as integration grid, scf energy
+* Custom parser for ORCA information such as integration grid, scf energy
   contributions (e.g., one-electron and two-electron energies), MP2 correlation
   energies, RI approximations.
-- Debug option to raise errors instead of skipping over files.
-- Alpha and beta electron HOMO and LUMO information.
-- 'return_energy' property regardless of driver.
+* Debug option to raise errors instead of skipping over files.
+* Alpha and beta electron HOMO and LUMO information.
+* 'return_energy' property regardless of driver.
 
-### Changed
+#### Changed
 
-- Nest iterations into a list instead of having int labels.
-- Standardized getting SCF, MP, and CC energies from cclib.
-- Requires outfile path to initialize json classes.
-- Write each JSON file directly after parsing instead of all at the end. That
+* Nest iterations into a list instead of having int labels.
+* Standardized getting SCF, MP, and CC energies from cclib.
+* Requires outfile path to initialize json classes.
+* Write each JSON file directly after parsing instead of all at the end. That
   way if the script crashes the proceeding JSON files are already written.
 
-## [0.0.1] - 2021-01-03
+### [0.0.1] - 2021-01-03
 
-### Added
+#### Added
 
-- Support for output files containing multiple jobs or iterations
-  (optimizations).
-- ORCA Schema creator for single-point energies and gradients.
+* Initial release!
 
 """
 
@@ -502,6 +503,20 @@ class orcaParser(outfileParser):
         # ----------------------------------------------------------
         if 'ORCA  MP2' == line.strip():
             self._extract_mp_energies(outfile, line)
+        
+        # -------------
+        # DIPOLE MOMENT
+        # -------------
+        #                                 X             Y             Z
+        # Electronic contribution:      5.09504      -0.27709     -14.55675
+        # Nuclear contribution   :     -3.13135       0.80269      11.24356
+        #                         -----------------------------------------
+        # Total Dipole Moment    :      1.96369       0.52560      -3.31319
+        #                         -----------------------------------------
+        # Magnitude (a.u.)       :      3.88710
+        # Magnitude (Debye)      :      9.88023
+        if 'DIPOLE MOMENT' == line.strip():
+            self._extract_dipole(outfile, line)
             
 
     def _after_parse(self):
@@ -680,6 +695,22 @@ class orcaParser(outfileParser):
                 self.data['keywords']['rik_approximation'] = True
             
             line = next(outfile)
+    
+    def _extract_dipole(self, outfile, line):
+        """The X, Y, and Z dipole components.
+
+        Final QCJSON specifies the method of the dipole moment (e.g.,
+        ``'scf_dipole_moment'``, ``'mp2_dipole_moment'``). For now, we just
+        store it as ``'dipole_moment'``.
+        """
+        if 'dipole_moment' not in self.data['properties'].keys():
+            self.data['properties']['dipole_moment'] = []
+        
+        while 'Total Dipole Moment    :' not in line:
+            line = next(outfile)
+        line_split = line.split()
+        dipole = [float(line_split[4]), float(line_split[5]), float(line_split[6])]
+        self.data['properties']['dipole_moment'].append(dipole)
 
 
 
@@ -1178,6 +1209,8 @@ class orcaJSON(QCJSON):
                 self.cclib_data.dispersionenergies[iteration], 'eV', 'hartree'
             )
             properties['scf_iterations'] = self.cclib_data.scfvalues[0].shape[0]
+            if 'dipole_moment' in self.parsed_data['properties'].keys():
+                properties['scf_dipole_moment'] = self.parsed_data['properties']['dipole_moment']
         elif self.method_type == 'moller-plesset':
             properties['scf_total_energy'] = self._get_scf_energy(iteration=iteration)
             properties['mp2_total_energy'] = self._get_mp_energy(iteration=iteration)
@@ -1204,6 +1237,17 @@ class orcaJSON(QCJSON):
         if self.calc_driver != 'optimization':
             for info in self.parsed_data['properties'].keys():
                 data = self.parsed_data['properties'][info][iteration]
+
+                # Rename any properties
+                if info == 'dipole_moment':
+                    if self.method_type == 'scf':
+                        prefix = 'scf'
+                    elif self.method_type == 'moller-plesset':
+                        prefix = 'mp2'
+                    elif self.method_type == 'coupled cluster':
+                        pass
+                    info = prefix + '_' + info
+
                 data_merge = {info: data}
                 properties = {**properties, **data_merge}
         
