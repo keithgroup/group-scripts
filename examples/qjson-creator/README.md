@@ -162,6 +162,7 @@ and this project adheres to
 #### Added
 
 * Dipole moment property.
+* Geometric convergence values and targets are parsed.
 
 #### Changed
 

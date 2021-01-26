@@ -498,6 +498,23 @@ class orcaParser(outfileParser):
         if 'TOTAL SCF ENERGY' == line.strip():
             self._extract_scf_energies(outfile, line)
         
+        #                       .--------------------.
+        # ----------------------|Geometry convergence|-------------------------
+        # Item                value                   Tolerance       Converged
+        # ---------------------------------------------------------------------
+        # Energy change      -0.0000629945            0.0000050000      NO
+        # RMS gradient        0.0000464055            0.0001000000      YES
+        # MAX gradient        0.0001724583            0.0003000000      YES
+        # RMS step            0.0061958646            0.0020000000      NO
+        # MAX step            0.0240077373            0.0040000000      NO
+        # ........................................................
+        # Max(Bonds)      0.0127      Max(Angles)    0.30
+        # Max(Dihed)        0.32      Max(Improp)    0.00
+        # ---------------------------------------------------------------------
+
+        if 'Geometry convergence' in line and '----------------------' in line:
+            self._extract_geo_conv(outfile, line)
+        
         # ----------------------------------------------------------
         #                         ORCA  MP2 
         # ----------------------------------------------------------
@@ -525,6 +542,9 @@ class orcaParser(outfileParser):
 
         if 'final_grid_level' not in self.data['keywords'].keys():
             self.data['keywords']['final_grid_level'] = self.data['keywords']['scf_grid_level']
+        
+        if 'geo_energy_change_value' in self.data['keywords'].keys():
+            self.data['keywords']['geo_energy_change_value'].insert(0, 0.0)
 
     def _extract_grid_info(self, outfile, line):
         """DFT integration grid information.
@@ -662,6 +682,7 @@ class orcaParser(outfileParser):
                 self.data['properties']['mp2_correlation_energy'].append(
                     float(line.split()[index])
                 )
+                break
             
             line = next(outfile)
 
@@ -669,6 +690,13 @@ class orcaParser(outfileParser):
         """Other scf information.
 
         This will be placed under the ``'keyword'`` JSON property.
+
+        Parameters
+        ----------
+        outfile : :obj:`io.TextIOWrapper`
+            Buffered text stream of the output file.
+        line : :obj:`str`
+            Parsed line from ``outfile``.
 
         Returns
         -------
@@ -702,6 +730,13 @@ class orcaParser(outfileParser):
         Final QCJSON specifies the method of the dipole moment (e.g.,
         ``'scf_dipole_moment'``, ``'mp2_dipole_moment'``). For now, we just
         store it as ``'dipole_moment'``.
+
+        Parameters
+        ----------
+        outfile : :obj:`io.TextIOWrapper`
+            Buffered text stream of the output file.
+        line : :obj:`str`
+            Parsed line from ``outfile``.
         """
         if 'dipole_moment' not in self.data['properties'].keys():
             self.data['properties']['dipole_moment'] = []
@@ -711,6 +746,49 @@ class orcaParser(outfileParser):
         line_split = line.split()
         dipole = [float(line_split[4]), float(line_split[5]), float(line_split[6])]
         self.data['properties']['dipole_moment'].append(dipole)
+    
+    def _add_geo_conv(self, info_label, line):
+        """Parse and add geometric convergence info to data.
+
+        Parameters
+        ----------
+        info_label : :obj:`str`
+            Label for geometric convergence criteria.
+        line : :obj:`str`
+            Line from output file to extract information from.
+        """
+        split_line = line.split()
+        value = float(split_line[2])
+        target = float(split_line[3])
+        if f'geo_{info_label}_target' not in self.data['keywords'].keys():
+            self.data['keywords'][f'geo_{info_label}_target'] = target
+        try:
+            self.data['keywords'][f'geo_{info_label}_value'].append(value)
+        except KeyError:
+            self.data['keywords'][f'geo_{info_label}_value'] = [value]
+    
+    def _extract_geo_conv(self, outfile, line):
+        """Extract geometric convergence values and tolerance.
+
+        Parameters
+        ----------
+        outfile : :obj:`io.TextIOWrapper`
+            Buffered text stream of the output file.
+        line : :obj:`str`
+            Parsed line from ``outfile``.
+        """
+        while 'Max(Dihed)' not in line and 'Max(Improp)' not in line:
+            if 'Energy change' in line:
+                self._add_geo_conv('energy_change', line)
+            elif 'RMS gradient' in line:
+                self._add_geo_conv('rms_gradient', line)
+            elif 'MAX gradient' in line:
+                self._add_geo_conv('max_gradient', line)
+            elif 'RMS step' in line:
+                self._add_geo_conv('rms_step', line)
+            elif 'MAX step' in line:
+                self._add_geo_conv('max_step', line)
+            line = next(outfile)
 
 
 
@@ -1148,11 +1226,20 @@ class orcaJSON(QCJSON):
         if 'scf_convergence_tolerance' not in keywords.keys():
             keywords['scf_convergence_tolerance'] = 'Normal'
         
-        # Manually parses SCF information like RI approximations.
-        # Manually parses SCF and final grid.
-        keywords = {
-            **keywords, **self.parsed_data['keywords']
-        }
+        # Adds manually parsed information.
+        for info in self.parsed_data['keywords'].keys():
+            data = self.parsed_data['keywords'][info]
+            if type(data) == list:
+                if len(data) != 1:
+                    # ORCA does an additional evaluation that does not have
+                    # geometric convergence information.
+                    if len(data) == iteration:
+                        continue
+                    else:
+                        data = data[iteration]
+            keywords = {
+                **keywords, **{info: data}
+            }
         
         # Specifies if FrozenCore is used in MP or CC jobs.
         if self.method_type == 'moller-plesset':
