@@ -280,7 +280,7 @@ def center_xyz(xyz_file, overwrite):
         Path to xyz file.
     """
     save_dir = os.path.dirname(os.path.realpath(xyz_file))
-    file_name = os.path.splitext(xyz_file)[0]
+    file_name = os.path.splitext(os.path.basename(xyz_file))[0]
     if not overwrite:
         file_name += '-centered'
     print(f'Centering {file_name}.xyz')
